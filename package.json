@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node scripts/bump-build.mjs && tsc && vite build",
+    "build:ci": "tsc && vite build",
     "preview": "vite preview",
     "test": "esbuild test/smoke.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/smoke.mjs && node node_modules/.cache/smoke.mjs"
   },

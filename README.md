@@ -93,10 +93,14 @@ Sieg: alle gegnerischen Gebäude zerstören. Niederlage: alle eigenen Gebäude v
 ```bash
 npm install      # Abhängigkeiten installieren
 npm run dev      # Dev-Server starten (http://localhost:5173)
-npm run build    # Produktions-Build nach dist/
+npm run build    # Produktions-Build nach dist/ (zählt die Build-Nr. hoch)
+npm run build:ci # Build ohne Hochzählen (wird im Deploy genutzt)
 npm run preview  # Produktions-Build lokal ansehen
 npm test         # Headless-Simulations-Smoke-Test
 ```
+
+Die Build-Nummer im Footer (`build 0.x`) wird bei jedem `npm run build`
+automatisch erhöht (`scripts/bump-build.mjs` → `src/version.ts`).
 
 ## Projektstruktur
 

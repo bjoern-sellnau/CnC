@@ -5,6 +5,7 @@ import { Unit } from "../entities/Unit";
 import { Building } from "../entities/Building";
 import { FOG_EXPLORED, FOG_HIDDEN, FOG_VISIBLE } from "../world/FogOfWar";
 import { MINIMAP, SIDEBAR_WIDTH } from "../ui/layout";
+import { VERSION_LABEL } from "../version";
 
 const TERRAIN_COLORS: Record<TerrainType, string> = {
   grass: "#3b5a2a",
@@ -43,6 +44,8 @@ export class Renderer {
     this.drawTooltip();
 
     if (game.gameOver) this.drawGameOver();
+
+    this.drawVersion();
   }
 
   // ---- World --------------------------------------------------------------
@@ -590,6 +593,18 @@ export class Renderer {
         ctx.fillText(`x${count}`, btn.x + btn.w - 4, btn.y + 13);
       }
     }
+  }
+
+  /** Build/version footer at the bottom-left of the screen. */
+  private drawVersion(): void {
+    const { ctx, game } = this;
+    ctx.font = "11px monospace";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    const w = ctx.measureText(VERSION_LABEL).width + 10;
+    ctx.fillRect(4, game.camera.viewportHeight - 18, w, 15);
+    ctx.fillStyle = "rgba(154, 208, 107, 0.65)";
+    ctx.fillText(VERSION_LABEL, 9, game.camera.viewportHeight - 7);
   }
 
   private drawGameOver(): void {

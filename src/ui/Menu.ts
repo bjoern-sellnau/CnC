@@ -1,4 +1,5 @@
 import { MISSIONS, type MissionConfig } from "../core/missions";
+import { VERSION_LABEL } from "../version";
 
 interface CardRect {
   x: number;
@@ -93,6 +94,11 @@ export class Menu {
     ctx.fillStyle = "#55663f";
     ctx.font = "12px monospace";
     ctx.fillText("Steuerung: WASD/Maus = Kamera · Links = Auswahl · Rechts = Befehl", vw / 2, vh - 30);
+
+    // Build/version label.
+    ctx.fillStyle = "#3f4a30";
+    ctx.font = "11px monospace";
+    ctx.fillText(VERSION_LABEL, vw / 2, vh - 12);
   }
 
   /** Returns a mission if a card was clicked, "sound" to toggle, or null. */

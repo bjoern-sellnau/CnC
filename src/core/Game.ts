@@ -554,9 +554,11 @@ export class Game implements GameContext {
       if (u.dead) {
         this.selected.delete(u);
         if (this.hoveredEntity === u) this.hoveredEntity = null;
-        this.spawnExplosion(u.pos, u.radius * 1.5);
+        // Bigger, louder blast for vehicles/aircraft than for infantry.
+        const big = !u.isInfantry;
+        this.spawnExplosion(u.pos, u.radius * (big ? 3 : 1.6));
         this.emitDeathParticles(u);
-        if (this.fog.isVisibleAt(u.pos)) sound.play("explosion");
+        if (this.fog.isVisibleAt(u.pos)) sound.play(big ? "boom" : "explosion");
         this.units.splice(i, 1);
       }
     }

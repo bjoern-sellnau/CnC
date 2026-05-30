@@ -32,7 +32,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build -- --base=/CnC/
+        run: npm run build:ci -- --base=/CnC/
 
       - name: Deploy to gh-pages
         run: |
