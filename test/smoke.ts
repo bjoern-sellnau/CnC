@@ -82,6 +82,24 @@ const check = (name: string, ok: boolean) => checks.push({ name, ok });
 }
 
 // ---------------------------------------------------------------------------
+// 3b. A manual move order is obeyed by every unit type, incl. harvesters
+//     (regression: harvesters used to instantly re-route to tiberium).
+// ---------------------------------------------------------------------------
+{
+  const game = new Game(MISSIONS[0]);
+  game.camera.setViewport(1280, 720);
+  // Move across empty, resource-free, unoccupied tiles inside the player base.
+  const goal = game.map.tileToWorldCenter(10, 10);
+  for (const type of ["soldier", "tank", "harvester", "aircraft"] as const) {
+    const u = game.spawnUnitAt("player", type, game.map.tileToWorldCenter(5, 10));
+    u.orderMove(game.ctx, goal);
+    for (let i = 0; i < 60 * 10; i++) game.update(dt);
+    const d = Math.hypot(goal.x - u.pos.x, goal.y - u.pos.y);
+    check(`${type} obeys manual move order`, d < 40);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 4. Aircraft flies over impassable terrain (straight-line movement).
 // ---------------------------------------------------------------------------
 {

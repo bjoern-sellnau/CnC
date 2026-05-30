@@ -6,7 +6,7 @@ import { HARVESTER_CAPACITY, TILE_SIZE, UNIT_STATS } from "../core/config";
 import { dist, dist2 } from "../core/util";
 import { findPath } from "../world/Pathfinding";
 
-type HarvestState = "seek" | "harvest" | "return" | "unload";
+type HarvestState = "manual" | "seek" | "harvest" | "return" | "unload";
 
 /** A mobile, commandable unit (soldier, tank, or harvester). */
 export class Unit extends Entity {
@@ -57,7 +57,12 @@ export class Unit extends Entity {
   /** Player/AI command: move to a world position. Clears combat intent. */
   orderMove(ctx: GameContext, goal: Vec2): void {
     this.attackTarget = null;
-    if (this.isHarvester) this.harvestState = "seek";
+    // A manual move pauses auto-harvesting until the player tells it to
+    // gather again (otherwise the harvester instantly re-routes to tiberium).
+    if (this.isHarvester) {
+      this.harvestState = "manual";
+      this.harvestTile = null;
+    }
     this.setDestination(ctx, goal);
   }
 
@@ -151,6 +156,11 @@ export class Unit extends Entity {
 
   private updateHarvester(dt: number, ctx: GameContext): void {
     switch (this.harvestState) {
+      case "manual": {
+        // Follow the player's move order, then sit idle (no auto-harvest).
+        this.advanceAlongPath(dt, ctx);
+        break;
+      }
       case "seek": {
         if (this.cargo >= HARVESTER_CAPACITY) {
           this.harvestState = "return";
