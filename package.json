@@ -1,0 +1,16 @@
+{
+  "name": "command-and-conquest",
+  "version": "0.1.0",
+  "description": "A 2D real-time strategy game inspired by the classic Command & Conquer games.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "esbuild test/smoke.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/smoke.mjs && node node_modules/.cache/smoke.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0"
+  }
+}
