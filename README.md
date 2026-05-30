@@ -32,7 +32,11 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
   ohnehin auf getrennten Produktionslinien.
 - **Gegner-KI**: baut Einheiten, sammelt Ressourcen, befestigt ihre Basis und
   greift in eskalierenden Wellen an.
-- **Sound** komplett prozedural über die Web Audio API erzeugt (keine Dateien).
+- **Sound** komplett prozedural über die Web Audio API erzeugt (keine Dateien),
+  inkl. Explosions-/Zerstörungs-Sounds bei vernichteten Einheiten & Gebäuden.
+- **Debug-Modus** (`F3`): visualisiert für ausgewählte Einheiten die vom
+  A\*-Algorithmus untersuchten Felder, den gewählten Pfad, das Ziel und den
+  Sichtradius – plus ein Info-Panel.
 - **HUD**: Seitenleiste mit Bau-Menü, Credits-/Stromanzeige und Minimap.
 
 ## Einheiten
@@ -70,6 +74,7 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 | Gebäude bauen | Button in der Seitenleiste klicken → erneut klicken, wenn „BEREIT“ → auf der Karte platzieren |
 | Platzierung abbrechen | `Esc` oder Rechtsklick |
 | Sound an/aus | `M` (oder Schalter im Menü) |
+| Debug-Overlay (Wegfindung) | `F3` oder `` ` `` – zeigt für ausgewählte Einheiten die A\*-Suche & den Pfad |
 | Zurück ins Menü | Klick auf den Sieg-/Niederlage-Bildschirm |
 
 ## Spielablauf

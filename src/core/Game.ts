@@ -58,6 +58,9 @@ export class Game implements GameContext {
   gameOver = false;
   victory = false;
 
+  /** Debug overlay: visualises pathfinding for selected units. */
+  debug = false;
+
   private readonly ai: EnemyAI;
 
   constructor(mission: MissionConfig = MISSIONS[0]) {
@@ -71,6 +74,13 @@ export class Game implements GameContext {
 
   get ctx(): GameContext {
     return this;
+  }
+
+  /** Toggle the pathfinding debug overlay and refresh traces for selection. */
+  toggleDebug(): boolean {
+    this.debug = !this.debug;
+    if (this.debug) for (const u of this.selected) u.recomputePath(this);
+    return this.debug;
   }
 
   // ---- Setup --------------------------------------------------------------
@@ -546,6 +556,7 @@ export class Game implements GameContext {
         if (this.hoveredEntity === u) this.hoveredEntity = null;
         this.spawnExplosion(u.pos, u.radius * 1.5);
         this.emitDeathParticles(u);
+        if (this.fog.isVisibleAt(u.pos)) sound.play("explosion");
         this.units.splice(i, 1);
       }
     }
@@ -556,6 +567,7 @@ export class Game implements GameContext {
         if (this.hoveredEntity === b) this.hoveredEntity = null;
         this.spawnExplosion(b.pos, b.radius);
         this.emitDeathParticles(b);
+        if (this.fog.isVisibleAt(b.pos)) sound.play("boom");
         this.buildings.splice(i, 1);
       }
     }

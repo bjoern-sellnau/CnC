@@ -13,6 +13,9 @@ export interface GameContext {
   readonly units: Unit[];
   readonly buildings: Building[];
 
+  /** When true, units record their A* search for the debug overlay. */
+  readonly debug: boolean;
+
   /** Add credits to a faction's account. */
   addCredits(faction: Faction, amount: number): void;
 

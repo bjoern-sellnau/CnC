@@ -199,6 +199,23 @@ const check = (name: string, ok: boolean) => checks.push({ name, ok });
 }
 
 // ---------------------------------------------------------------------------
+// 8. Debug mode records the A* search trace; off => no trace overhead.
+// ---------------------------------------------------------------------------
+{
+  const g = new Game(MISSIONS[0]);
+  g.camera.setViewport(1280, 720);
+  g.debug = true;
+  const u = g.spawnUnitAt("player", "soldier", g.map.tileToWorldCenter(20, 20));
+  u.orderMove(g.ctx, g.map.tileToWorldCenter(30, 24));
+  check("debug records A* search trace", u.debugVisited.length > 0);
+  check("debug computes a path", u.path.length > 0);
+
+  g.debug = false;
+  u.orderMove(g.ctx, g.map.tileToWorldCenter(20, 20));
+  check("no search trace when debug off", u.debugVisited.length === 0);
+}
+
+// ---------------------------------------------------------------------------
 for (const c of checks) console.log(`${c.ok ? "PASS" : "FAIL"}  ${c.name}`);
 const allOk = checks.every((c) => c.ok);
 console.log(allOk ? "\nSMOKE TEST: PASS" : "\nSMOKE TEST: FAIL");

@@ -4,7 +4,7 @@ import type { Faction, UnitType, Vec2 } from "../core/types";
 import type { GameContext } from "../core/GameContext";
 import { HARVESTER_CAPACITY, TILE_SIZE, UNIT_STATS } from "../core/config";
 import { dist, dist2 } from "../core/util";
-import { findPath } from "../world/Pathfinding";
+import { findPath, type TileCoord } from "../world/Pathfinding";
 
 type HarvestState = "manual" | "seek" | "harvest" | "return" | "unload";
 
@@ -17,6 +17,8 @@ export class Unit extends Entity {
   path: Vec2[] = [];
   pathIndex = 0;
   moveGoal: Vec2 | null = null;
+  /** Tiles the A* search expanded on the last pathfind (debug overlay only). */
+  debugVisited: TileCoord[] = [];
 
   // Combat
   attackTarget: Entity | null = null;
@@ -91,9 +93,12 @@ export class Unit extends Entity {
     if (this.isFlying) {
       this.path = [{ x: goal.x, y: goal.y }];
       this.pathIndex = 0;
+      this.debugVisited = [];
       return;
     }
-    const p = findPath(ctx.map, this.pos, goal);
+    const trace = ctx.debug ? [] : undefined;
+    const p = findPath(ctx.map, this.pos, goal, 6000, trace);
+    this.debugVisited = trace ?? [];
     if (p && p.length > 0) {
       this.path = p;
       this.pathIndex = 0;
@@ -101,6 +106,11 @@ export class Unit extends Entity {
       this.path = [];
       this.pathIndex = 0;
     }
+  }
+
+  /** Re-run pathfinding to the current goal (used to refresh the debug trace). */
+  recomputePath(ctx: GameContext): void {
+    if (this.moveGoal && !this.isFlying) this.setDestination(ctx, this.moveGoal);
   }
 
   update(dt: number, ctx: GameContext): void {

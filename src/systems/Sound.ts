@@ -3,7 +3,15 @@
  * All methods are safe no-ops in non-browser environments (e.g. the headless
  * test) and before the user's first interaction unlocks the AudioContext.
  */
-type SfxName = "shoot" | "rocket" | "explosion" | "build" | "ready" | "place" | "select";
+type SfxName =
+  | "shoot"
+  | "rocket"
+  | "explosion"
+  | "boom"
+  | "build"
+  | "ready"
+  | "place"
+  | "select";
 
 export class Sound {
   private ctx: AudioContext | null = null;
@@ -45,7 +53,12 @@ export class Sound {
         this.blip("sawtooth", 320, 120, 0.18, 0.16);
         break;
       case "explosion":
-        this.noiseBurst(0.3, 0.35);
+        this.noiseBurst(0.3, 0.35, 900);
+        break;
+      case "boom":
+        // Bigger destruction blast: low sine "whump" + a longer noise tail.
+        this.blip("sine", 160, 40, 0.45, 0.4);
+        this.noiseBurst(0.55, 0.5, 500);
         break;
       case "build":
         this.blip("triangle", 160, 240, 0.12, 0.18);
@@ -84,7 +97,7 @@ export class Sound {
     osc.stop(t + duration + 0.02);
   }
 
-  private noiseBurst(duration: number, gain: number): void {
+  private noiseBurst(duration: number, gain: number, cutoff = 900): void {
     const ctx = this.ctx!;
     const frames = Math.floor(ctx.sampleRate * duration);
     const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
@@ -99,7 +112,7 @@ export class Sound {
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = 900;
+    lp.frequency.value = cutoff;
     src.connect(lp);
     lp.connect(g);
     g.connect(this.master!);

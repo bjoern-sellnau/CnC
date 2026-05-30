@@ -37,6 +37,8 @@ export class InputController {
     c.addEventListener("contextmenu", (e) => e.preventDefault());
     window.addEventListener("keydown", (e) => {
       sound.unlock();
+      // F3 would trigger the browser's find-next; suppress it for our toggle.
+      if (e.key === "F3") e.preventDefault();
       this.keys.add(e.key.toLowerCase());
     });
     window.addEventListener("keyup", (e) => {
@@ -44,6 +46,7 @@ export class InputController {
       if (!this.enabled) return;
       if (e.key === "Escape") this.game.cancelPlacement();
       if (e.key.toLowerCase() === "m") sound.toggle();
+      if (e.key === "F3" || e.key === "`") this.game.toggleDebug();
     });
   }
 

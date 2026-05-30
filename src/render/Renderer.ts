@@ -37,6 +37,7 @@ export class Renderer {
     this.drawExplosions();
     this.drawParticles();
     this.drawFog();
+    if (game.debug) this.drawDebug();
     this.drawSelectionBox();
     this.drawHud();
     this.drawTooltip();
@@ -298,6 +299,109 @@ export class Renderer {
     const f = e.healthFraction;
     ctx.fillStyle = f > 0.5 ? "#5fd05f" : f > 0.25 ? "#e0c040" : "#d04040";
     ctx.fillRect(x + 8, y + h - 7, barW * f, 3);
+  }
+
+  /**
+   * Pathfinding debug overlay for the selected units: the A* cells that were
+   * expanded (coloured by search order), the chosen path, the next waypoint
+   * and the final goal, plus a small state panel.
+   */
+  private drawDebug(): void {
+    const { ctx, game } = this;
+    const cam = game.camera;
+    const toScreen = (wx: number, wy: number) => ({ x: wx - cam.x, y: wy - cam.y });
+
+    for (const u of game.selected) {
+      // Expanded A* cells, tinted from blue (early) to cyan (late).
+      const n = u.debugVisited.length;
+      for (let i = 0; i < n; i++) {
+        const c = u.debugVisited[i];
+        const t = n > 1 ? i / (n - 1) : 1;
+        ctx.fillStyle = `rgba(60, ${Math.round(120 + t * 135)}, 255, 0.22)`;
+        ctx.fillRect(c.tx * TILE_SIZE - cam.x, c.ty * TILE_SIZE - cam.y, TILE_SIZE, TILE_SIZE);
+      }
+
+      // Sight radius.
+      const us = toScreen(u.pos.x, u.pos.y);
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(us.x, us.y, UNIT_STATS[u.type].sightRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Chosen path: unit -> remaining waypoints.
+      if (u.path.length > 0) {
+        ctx.strokeStyle = "#ffe27a";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(us.x, us.y);
+        for (let i = u.pathIndex; i < u.path.length; i++) {
+          const p = toScreen(u.path[i].x, u.path[i].y);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+
+        // Waypoint dots.
+        for (let i = u.pathIndex; i < u.path.length; i++) {
+          const p = toScreen(u.path[i].x, u.path[i].y);
+          ctx.fillStyle = i === u.pathIndex ? "#fff" : "#ffd24a";
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, i === u.pathIndex ? 4 : 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Goal marker (X).
+      if (u.moveGoal) {
+        const g = toScreen(u.moveGoal.x, u.moveGoal.y);
+        ctx.strokeStyle = "#ff5f5f";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(g.x - 6, g.y - 6);
+        ctx.lineTo(g.x + 6, g.y + 6);
+        ctx.moveTo(g.x + 6, g.y - 6);
+        ctx.lineTo(g.x - 6, g.y + 6);
+        ctx.stroke();
+      }
+    }
+
+    this.drawDebugPanel();
+  }
+
+  private drawDebugPanel(): void {
+    const { ctx, game } = this;
+    const lines: string[] = [
+      `DEBUG (F3/\`)  ausgewählt: ${game.selected.size}`,
+      `Einheiten ${game.units.length} · Gebäude ${game.buildings.length} · Partikel ${game.particles.length}`,
+    ];
+    const first = game.selected.values().next().value;
+    if (first) {
+      const state = first.attackTarget
+        ? "Angriff"
+        : first.isMoving
+        ? "Bewegung"
+        : "Leerlauf";
+      lines.push(
+        `Pfad: ${first.pathIndex}/${first.path.length} Wegpkt · besucht ${first.debugVisited.length} Felder · ${state}`
+      );
+    }
+
+    ctx.font = "11px monospace";
+    const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16;
+    const h = 8 + lines.length * 15;
+    ctx.fillStyle = "rgba(10,14,8,0.8)";
+    ctx.fillRect(8, 8, w, h);
+    ctx.strokeStyle = "#9ad06b";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(8, 8, w, h);
+    ctx.fillStyle = "#9ad06b";
+    ctx.textAlign = "left";
+    let y = 22;
+    for (const l of lines) {
+      ctx.fillText(l, 16, y);
+      y += 15;
+    }
   }
 
   private drawParticles(): void {

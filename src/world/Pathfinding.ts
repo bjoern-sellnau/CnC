@@ -9,17 +9,27 @@ interface Node {
   parent: Node | null;
 }
 
+/** A tile coordinate, used for the optional debug search trace. */
+export interface TileCoord {
+  tx: number;
+  ty: number;
+}
+
 /**
  * A* pathfinding on the map grid with 8-directional movement.
  * Returns a list of tile centers (world coords) from start to goal,
  * or null if no path exists. Diagonal moves through two blocked
  * corners are disallowed to avoid clipping through buildings.
+ *
+ * If `trace` is provided, every tile the search expands is appended to it
+ * (in expansion order) so a debug overlay can show how the path was found.
  */
 export function findPath(
   map: GameMap,
   start: Vec2,
   goal: Vec2,
-  maxNodes = 6000
+  maxNodes = 6000,
+  trace?: TileCoord[]
 ): Vec2[] | null {
   const s = map.worldToTile(start.x, start.y);
   let g = map.worldToTile(goal.x, goal.y);
@@ -56,6 +66,7 @@ export function findPath(
       return reconstruct(map, cur);
     }
     closed.add(key(cur.tx, cur.ty));
+    if (trace) trace.push({ tx: cur.tx, ty: cur.ty });
 
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
