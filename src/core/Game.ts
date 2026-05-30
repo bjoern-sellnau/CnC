@@ -1,17 +1,19 @@
 import { Camera } from "../world/Camera";
 import { GameMap } from "../world/GameMap";
+import { FogOfWar } from "../world/FogOfWar";
 import { Building } from "../entities/Building";
 import { Unit } from "../entities/Unit";
 import { Entity } from "../entities/Entity";
 import { Explosion, Projectile } from "../systems/effects";
 import { FactionState } from "../systems/FactionState";
 import { EnemyAI } from "../systems/EnemyAI";
+import { sound } from "../systems/Sound";
 import {
   BUILDING_STATS,
   MAP_HEIGHT,
   MAP_WIDTH,
-  STARTING_CREDITS,
   TILE_SIZE,
+  UNIT_STATS,
 } from "./config";
 import type { GameContext } from "./GameContext";
 import type {
@@ -21,12 +23,16 @@ import type {
   UnitType,
   Vec2,
 } from "./types";
+import type { MissionConfig } from "./missions";
+import { MISSIONS } from "./missions";
 import { computeSidebarButtons, type ButtonRect } from "../ui/layout";
 import { dist } from "./util";
 
 /** Top-level orchestrator. Owns all state and drives the simulation. */
 export class Game implements GameContext {
-  readonly map = new GameMap();
+  readonly mission: MissionConfig;
+  readonly map: GameMap;
+  readonly fog = new FogOfWar();
   readonly camera = new Camera();
 
   readonly units: Unit[] = [];
@@ -34,8 +40,8 @@ export class Game implements GameContext {
   readonly projectiles: Projectile[] = [];
   readonly explosions: Explosion[] = [];
 
-  readonly player = new FactionState("player", STARTING_CREDITS);
-  readonly enemy = new FactionState("enemy", STARTING_CREDITS);
+  readonly player: FactionState;
+  readonly enemy: FactionState;
 
   readonly selected = new Set<Unit>();
   placement: { type: BuildingType; tx: number; ty: number; valid: boolean } | null = null;
@@ -49,8 +55,12 @@ export class Game implements GameContext {
 
   private readonly ai: EnemyAI;
 
-  constructor() {
-    this.ai = new EnemyAI(this);
+  constructor(mission: MissionConfig = MISSIONS[0]) {
+    this.mission = mission;
+    this.map = new GameMap(mission.seed);
+    this.player = new FactionState("player", mission.startingCredits);
+    this.enemy = new FactionState("enemy", mission.enemyCredits);
+    this.ai = new EnemyAI(this, mission.enemyWaveSize, mission.enemyWaveInterval);
     this.setupBases();
   }
 
@@ -89,6 +99,11 @@ export class Game implements GameContext {
       this.placeBuilding(faction, "refinery", tx - 4, ty);
       this.placeBuilding(faction, "barracks", tx, ty + 4);
       this.placeBuilding(faction, "war_factory", tx + 4, ty + 4);
+      if (this.mission.enemyDefences) {
+        this.placeBuilding(faction, "guard_tower", tx - 1, ty - 1);
+        this.placeBuilding(faction, "guard_tower", tx + 3, ty - 1);
+        this.placeBuilding(faction, "guard_tower", tx - 1, ty + 3);
+      }
     }
   }
 
@@ -98,8 +113,15 @@ export class Game implements GameContext {
     this.factionState(faction).credits += amount;
   }
 
-  spawnProjectile(from: Vec2, to: Vec2, damage: number, target: Entity): void {
-    this.projectiles.push(new Projectile(from, to, damage, target));
+  spawnProjectile(
+    from: Vec2,
+    to: Vec2,
+    damage: number,
+    target: Entity,
+    splashRadius = 0
+  ): void {
+    this.projectiles.push(new Projectile(from, to, damage, target, splashRadius));
+    if (this.fog.isVisibleAt(from)) sound.play(splashRadius > 0 ? "rocket" : "shoot");
   }
 
   spawnExplosion(pos: Vec2, size: number): void {
@@ -203,7 +225,7 @@ export class Game implements GameContext {
   }
 
   private unitProducer(type: UnitType): BuildingType {
-    return type === "soldier" ? "barracks" : "war_factory";
+    return UNIT_STATS[type].producedBy;
   }
 
   private enterPlacement(type: BuildingType): void {
@@ -227,6 +249,7 @@ export class Game implements GameContext {
     this.placeBuilding("player", p.type, p.tx, p.ty);
     this.player.buildingQueue = null;
     this.placement = null;
+    sound.play("place");
     return true;
   }
 
@@ -291,6 +314,7 @@ export class Game implements GameContext {
     } else {
       u.orderMove(this, building.rallyPoint);
     }
+    if (faction === "player") sound.play("ready");
   }
 
   // ---- Main update --------------------------------------------------------
@@ -307,23 +331,56 @@ export class Game implements GameContext {
     this.ai.update(dt);
 
     for (const u of this.units) if (!u.dead) u.update(dt, this);
+    for (const b of this.buildings) if (!b.dead && b.isDefensive) b.update(dt, this);
     this.updateEffects(dt);
 
+    this.updateFog();
     this.cleanupDead();
     this.checkEndConditions();
+  }
+
+  /** Re-stamp player vision from all friendly units and buildings. */
+  private updateFog(): void {
+    this.fog.beginFrame();
+    for (const u of this.units) {
+      if (u.dead || u.faction !== "player") continue;
+      this.fog.reveal(u.pos, UNIT_STATS[u.type].sightRadius);
+    }
+    for (const b of this.buildings) {
+      if (b.dead || b.faction !== "player") continue;
+      this.fog.reveal(b.pos, Math.max(b.radius * 2, 120));
+    }
   }
 
   private updateEffects(dt: number): void {
     for (const p of this.projectiles) {
       if (p.dead) continue;
       p.update(dt, (proj) => {
-        if (!proj.target.dead) {
-          proj.target.takeDamage(proj.damage);
-          this.spawnExplosion(proj.to, proj.target.kind === "building" ? 14 : 8);
-        }
+        this.applyProjectileDamage(proj);
       });
     }
     for (const e of this.explosions) if (!e.dead) e.update(dt);
+  }
+
+  private applyProjectileDamage(proj: Projectile): void {
+    const impact = proj.to;
+    if (proj.splashRadius > 0) {
+      // Area damage to everything sharing the target's faction nearby.
+      const victimFaction = proj.target.faction;
+      for (const e of [...this.units, ...this.buildings]) {
+        if (e.dead || e.faction !== victimFaction) continue;
+        const d = dist(impact, e.pos);
+        if (d <= proj.splashRadius + e.radius) {
+          const falloff = 1 - (d / (proj.splashRadius + e.radius)) * 0.5;
+          e.takeDamage(proj.damage * falloff);
+        }
+      }
+      this.spawnExplosion(impact, proj.splashRadius);
+    } else if (!proj.target.dead) {
+      proj.target.takeDamage(proj.damage);
+      this.spawnExplosion(impact, proj.target.kind === "building" ? 14 : 8);
+    }
+    if (this.fog.isVisibleAt(impact)) sound.play("explosion");
   }
 
   private recomputePower(): void {
@@ -359,6 +416,7 @@ export class Game implements GameContext {
           fs.buildingQueue = null;
         } else {
           fs.buildingQueue.ready = true; // player must place it
+          sound.play("ready");
         }
       }
     }
@@ -423,8 +481,9 @@ export class Game implements GameContext {
   /** Rebuild sidebar buttons for the current viewport. */
   rebuildButtons(): void {
     const unitOptions: ProducibleType[] = [];
-    if (this.hasBuilding("player", "barracks")) unitOptions.push("soldier");
-    if (this.hasBuilding("player", "war_factory")) unitOptions.push("tank", "harvester");
+    if (this.hasBuilding("player", "barracks")) unitOptions.push("soldier", "rocket_soldier");
+    if (this.hasBuilding("player", "war_factory"))
+      unitOptions.push("tank", "artillery", "aircraft", "harvester");
     this.buttons = computeSidebarButtons(this.camera.viewportWidth, unitOptions);
   }
 }

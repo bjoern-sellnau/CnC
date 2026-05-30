@@ -50,6 +50,10 @@ export class Unit extends Entity {
     return this.type === "harvester";
   }
 
+  get isFlying(): boolean {
+    return UNIT_STATS[this.type].flying === true;
+  }
+
   /** Player/AI command: move to a world position. Clears combat intent. */
   orderMove(ctx: GameContext, goal: Vec2): void {
     this.attackTarget = null;
@@ -74,6 +78,12 @@ export class Unit extends Entity {
 
   private setDestination(ctx: GameContext, goal: Vec2): void {
     this.moveGoal = { x: goal.x, y: goal.y };
+    // Flying units ignore terrain and move in a straight line.
+    if (this.isFlying) {
+      this.path = [{ x: goal.x, y: goal.y }];
+      this.pathIndex = 0;
+      return;
+    }
     const p = findPath(ctx.map, this.pos, goal);
     if (p && p.length > 0) {
       this.path = p;
@@ -116,7 +126,13 @@ export class Unit extends Entity {
         this.path = [];
         this.moveGoal = null;
         if (this.cooldown <= 0) {
-          ctx.spawnProjectile(this.pos, this.attackTarget.pos, s.damage, this.attackTarget);
+          ctx.spawnProjectile(
+            this.pos,
+            this.attackTarget.pos,
+            s.damage,
+            this.attackTarget,
+            s.splashRadius ?? 0
+          );
           this.cooldown = s.attackCooldown;
         }
         return;
@@ -245,8 +261,9 @@ export class Unit extends Entity {
   }
 
   private separate(ctx: GameContext): void {
+    if (this.isFlying) return; // aircraft pass over everything
     for (const other of ctx.units) {
-      if (other === this || other.dead) continue;
+      if (other === this || other.dead || other.isFlying) continue;
       const dx = this.pos.x - other.pos.x;
       const dy = this.pos.y - other.pos.y;
       const minDist = this.radius + other.radius;

@@ -10,7 +10,13 @@ export interface Vec2 {
 export type TerrainType = "grass" | "sand" | "rock" | "water";
 
 /** A unit kind that can be produced and commanded. */
-export type UnitType = "soldier" | "tank" | "harvester";
+export type UnitType =
+  | "soldier"
+  | "rocket_soldier"
+  | "tank"
+  | "artillery"
+  | "aircraft"
+  | "harvester";
 
 /** A building kind that can be constructed. */
 export type BuildingType =
@@ -18,7 +24,9 @@ export type BuildingType =
   | "power_plant"
   | "refinery"
   | "barracks"
-  | "war_factory";
+  | "war_factory"
+  | "guard_tower"
+  | "wall";
 
 /** Anything the build sidebar can produce. */
 export type ProducibleType = UnitType | BuildingType;

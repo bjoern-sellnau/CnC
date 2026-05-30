@@ -1,6 +1,7 @@
 import { Entity } from "./Entity";
 import type { BuildingType, Faction, Vec2 } from "../core/types";
 import { BUILDING_STATS, TILE_SIZE } from "../core/config";
+import type { GameContext } from "../core/GameContext";
 
 /** A static structure occupying a rectangular footprint of tiles. */
 export class Building extends Entity {
@@ -33,6 +34,8 @@ export class Building extends Entity {
     };
   }
 
+  private cooldown = 0;
+
   get kind(): "building" {
     return "building";
   }
@@ -43,6 +46,23 @@ export class Building extends Entity {
 
   get power(): number {
     return this.stats.power;
+  }
+
+  get isDefensive(): boolean {
+    return this.stats.defense !== undefined;
+  }
+
+  /** Defensive buildings (guard towers) auto-fire at nearby enemies. */
+  update(dt: number, ctx: GameContext): void {
+    const def = this.stats.defense;
+    if (!def) return;
+    if (this.cooldown > 0) this.cooldown -= dt;
+    if (this.cooldown > 0) return;
+    const target = ctx.findNearestEnemy(this.faction, this.pos, def.range + this.radius);
+    if (target) {
+      ctx.spawnProjectile(this.pos, target.pos, def.damage, target);
+      this.cooldown = def.attackCooldown;
+    }
   }
 
   /** Iterate the tile coordinates this building covers. */

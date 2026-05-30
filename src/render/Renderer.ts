@@ -1,6 +1,7 @@
 import type { Game } from "../core/Game";
 import { BUILDING_STATS, MAP_HEIGHT, MAP_WIDTH, TILE_SIZE } from "../core/config";
 import type { TerrainType } from "../core/types";
+import { FOG_EXPLORED, FOG_HIDDEN, FOG_VISIBLE } from "../world/FogOfWar";
 import { MINIMAP, SIDEBAR_WIDTH } from "../ui/layout";
 
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -32,6 +33,7 @@ export class Renderer {
     this.drawUnits();
     this.drawProjectiles();
     this.drawExplosions();
+    this.drawFog();
     this.drawSelectionBox();
     this.drawHud();
 
@@ -87,6 +89,9 @@ export class Renderer {
     const { ctx, game } = this;
     const cam = game.camera;
     for (const b of game.buildings) {
+      // Hide enemy buildings in never-explored fog.
+      if (b.faction === "enemy" && this.fogHidden(b.pos.x, b.pos.y)) continue;
+
       const sx = b.tileX * TILE_SIZE - cam.x;
       const sy = b.tileY * TILE_SIZE - cam.y;
       const pw = b.tileW * TILE_SIZE;
@@ -100,13 +105,23 @@ export class Renderer {
       ctx.lineWidth = 2;
       ctx.strokeRect(sx + 2, sy + 2, pw - 4, ph - 4);
 
-      // Label.
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(sx + 2, sy + ph - 14, pw - 4, 12);
-      ctx.fillStyle = "#e8f0d8";
-      ctx.font = "9px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(b.stats.name, sx + pw / 2, sy + ph - 4);
+      // Turret barrel for defensive buildings.
+      if (b.isDefensive) {
+        ctx.fillStyle = "#2a2a2a";
+        ctx.beginPath();
+        ctx.arc(sx + pw / 2, sy + ph / 2, pw * 0.28, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Label (only for buildings wide enough to fit text).
+      if (b.tileW >= 2) {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(sx + 2, sy + ph - 14, pw - 4, 12);
+        ctx.fillStyle = "#e8f0d8";
+        ctx.font = "9px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(b.stats.name, sx + pw / 2, sy + ph - 4);
+      }
 
       this.drawHealthBar(sx, sy - 6, pw, b.healthFraction);
     }
@@ -140,9 +155,20 @@ export class Renderer {
     const { ctx, game } = this;
     const cam = game.camera;
     for (const u of game.units) {
+      // Enemy units are only visible inside the player's current sight.
+      if (u.faction === "enemy" && !game.fog.isVisibleAt(u.pos)) continue;
+
       const sx = u.pos.x - cam.x;
       const sy = u.pos.y - cam.y;
       if (sx < -20 || sy < -20 || sx > cam.viewportWidth + 20 || sy > cam.viewportHeight + 20) continue;
+
+      // Flying units cast a small shadow to read as airborne.
+      if (u.isFlying) {
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath();
+        ctx.arc(sx + 6, sy + 8, u.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // Selection ring.
       if (game.selected.has(u)) {
@@ -201,6 +227,32 @@ export class Renderer {
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
+    }
+  }
+
+  private fogHidden(wx: number, wy: number): boolean {
+    if (!this.game.fog.enabled) return false;
+    const t = this.game.map.worldToTile(wx, wy);
+    return this.game.fog.get(t.tx, t.ty) === FOG_HIDDEN;
+  }
+
+  /** Overlay darkness for unexplored (black) and explored-but-unseen (dim) tiles. */
+  private drawFog(): void {
+    const { ctx, game } = this;
+    if (!game.fog.enabled) return;
+    const cam = game.camera;
+    const startTx = Math.max(0, Math.floor(cam.x / TILE_SIZE));
+    const startTy = Math.max(0, Math.floor(cam.y / TILE_SIZE));
+    const endTx = Math.min(MAP_WIDTH, Math.ceil((cam.x + this.worldViewW()) / TILE_SIZE));
+    const endTy = Math.min(MAP_HEIGHT, Math.ceil((cam.y + cam.viewportHeight) / TILE_SIZE));
+
+    for (let ty = startTy; ty < endTy; ty++) {
+      for (let tx = startTx; tx < endTx; tx++) {
+        const f = game.fog.get(tx, ty);
+        if (f === FOG_VISIBLE) continue;
+        ctx.fillStyle = f === FOG_HIDDEN ? "#000000" : "rgba(0,0,0,0.5)";
+        ctx.fillRect(tx * TILE_SIZE - cam.x, ty * TILE_SIZE - cam.y, TILE_SIZE + 1, TILE_SIZE + 1);
+      }
     }
   }
 
@@ -270,20 +322,29 @@ export class Renderer {
     // Terrain (coarse: sample every tile, cheap enough at this map size).
     for (let ty = 0; ty < MAP_HEIGHT; ty += 1) {
       for (let tx = 0; tx < MAP_WIDTH; tx += 1) {
-        if (game.map.getResource(tx, ty) > 0) {
+        const f = game.fog.enabled ? game.fog.get(tx, ty) : FOG_VISIBLE;
+        if (f === FOG_HIDDEN) {
+          ctx.fillStyle = "#000";
+        } else if (game.map.getResource(tx, ty) > 0) {
           ctx.fillStyle = "#7CFC9A";
         } else {
           ctx.fillStyle = TERRAIN_COLORS[game.map.getTerrain(tx, ty)];
         }
         ctx.fillRect(mx + tx * sx, my + ty * sy, sx + 0.5, sy + 0.5);
+        if (f === FOG_EXPLORED) {
+          ctx.fillStyle = "rgba(0,0,0,0.45)";
+          ctx.fillRect(mx + tx * sx, my + ty * sy, sx + 0.5, sy + 0.5);
+        }
       }
     }
-    // Entities.
+    // Entities (enemies only where currently visible).
     for (const b of game.buildings) {
+      if (b.faction === "enemy" && this.fogHidden(b.pos.x, b.pos.y)) continue;
       ctx.fillStyle = b.faction === "player" ? "#5fd0ff" : "#ff6a5f";
       ctx.fillRect(mx + b.tileX * sx, my + b.tileY * sy, b.tileW * sx, b.tileH * sy);
     }
     for (const u of game.units) {
+      if (u.faction === "enemy" && !game.fog.isVisibleAt(u.pos)) continue;
       ctx.fillStyle = u.faction === "player" ? "#aef" : "#fbb";
       const t = game.map.worldToTile(u.pos.x, u.pos.y);
       ctx.fillRect(mx + t.tx * sx, my + t.ty * sy, 2, 2);
@@ -346,6 +407,6 @@ export class Renderer {
     ctx.fillText(game.victory ? "SIEG!" : "NIEDERLAGE", w / 2, h / 2);
     ctx.fillStyle = "#d8e8c0";
     ctx.font = "16px monospace";
-    ctx.fillText("F5 zum Neustarten", w / 2, h / 2 + 36);
+    ctx.fillText("Klick für Hauptmenü", w / 2, h / 2 + 36);
   }
 }

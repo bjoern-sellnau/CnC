@@ -2,6 +2,7 @@ import type { Game } from "./Game";
 import type { Entity } from "../entities/Entity";
 import type { Unit } from "../entities/Unit";
 import { SIDEBAR_WIDTH } from "../ui/layout";
+import { sound } from "../systems/Sound";
 import { TILE_SIZE } from "./config";
 import type { Vec2 } from "./types";
 import { dist } from "./util";
@@ -11,12 +12,21 @@ export class InputController {
   private mouse = { x: 0, y: 0 };
   private dragStart: Vec2 | null = null;
   private readonly keys = new Set<string>();
+  /** When false (e.g. while the menu is shown) all input is ignored. */
+  enabled = true;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly game: Game
+    private game: Game
   ) {
     this.attach();
+  }
+
+  /** Point the controller at a new game (e.g. after starting a mission). */
+  setGame(game: Game): void {
+    this.game = game;
+    this.dragStart = null;
+    this.keys.clear();
   }
 
   private attach(): void {
@@ -25,10 +35,15 @@ export class InputController {
     c.addEventListener("mousemove", (e) => this.onMouseMove(e));
     window.addEventListener("mouseup", (e) => this.onMouseUp(e));
     c.addEventListener("contextmenu", (e) => e.preventDefault());
-    window.addEventListener("keydown", (e) => this.keys.add(e.key.toLowerCase()));
+    window.addEventListener("keydown", (e) => {
+      sound.unlock();
+      this.keys.add(e.key.toLowerCase());
+    });
     window.addEventListener("keyup", (e) => {
       this.keys.delete(e.key.toLowerCase());
+      if (!this.enabled) return;
       if (e.key === "Escape") this.game.cancelPlacement();
+      if (e.key.toLowerCase() === "m") sound.toggle();
     });
   }
 
@@ -37,6 +52,7 @@ export class InputController {
   }
 
   private onMouseDown(e: MouseEvent): void {
+    if (!this.enabled) return;
     const sx = e.offsetX;
     const sy = e.offsetY;
     this.mouse = { x: sx, y: sy };
@@ -65,6 +81,7 @@ export class InputController {
   }
 
   private onMouseMove(e: MouseEvent): void {
+    if (!this.enabled) return;
     this.mouse = { x: e.offsetX, y: e.offsetY };
 
     // Hovered sidebar button.
@@ -98,7 +115,7 @@ export class InputController {
   }
 
   private onMouseUp(e: MouseEvent): void {
-    if (e.button !== 0 || !this.dragStart) return;
+    if (!this.enabled || e.button !== 0 || !this.dragStart) return;
     const box = this.game.selectionBox;
     const additive = this.keys.has("shift");
     if (!additive) this.game.selected.clear();
@@ -182,6 +199,7 @@ export class InputController {
 
   /** Called each frame to apply continuous input (camera scrolling). */
   update(dt: number): void {
+    if (!this.enabled) return;
     const cam = this.game.camera;
     const speed = cam.speed * dt;
     let dx = 0;

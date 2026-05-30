@@ -7,14 +7,16 @@ export class Projectile {
   readonly target: Entity;
   readonly to: Vec2;
   readonly damage: number;
+  readonly splashRadius: number;
   readonly speed = 480;
   dead = false;
 
-  constructor(from: Vec2, to: Vec2, damage: number, target: Entity) {
+  constructor(from: Vec2, to: Vec2, damage: number, target: Entity, splashRadius = 0) {
     this.pos = { x: from.x, y: from.y };
     this.to = { x: to.x, y: to.y };
     this.damage = damage;
     this.target = target;
+    this.splashRadius = splashRadius;
   }
 
   update(dt: number, onHit: (p: Projectile) => void): void {

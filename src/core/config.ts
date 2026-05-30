@@ -25,6 +25,10 @@ export interface UnitStats {
   producedBy: BuildingType;
   color: string;
   radius: number; // pixels, for drawing & collision
+  /** Flying units ignore terrain and pathfinding (straight-line movement). */
+  flying?: boolean;
+  /** Area-of-effect radius in pixels for splash damage (0 = single target). */
+  splashRadius?: number;
 }
 
 export const UNIT_STATS: Record<UnitType, UnitStats> = {
@@ -42,6 +46,20 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
     color: "#9ad06b",
     radius: 6,
   },
+  rocket_soldier: {
+    name: "Raketensoldat",
+    cost: 300,
+    hp: 70,
+    speed: 48,
+    damage: 28,
+    range: 140,
+    attackCooldown: 1.3,
+    sightRadius: 180,
+    buildTime: 5,
+    producedBy: "barracks",
+    color: "#c97b5a",
+    radius: 6,
+  },
   tank: {
     name: "Panzer",
     cost: 600,
@@ -55,6 +73,36 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
     producedBy: "war_factory",
     color: "#c8b95a",
     radius: 10,
+  },
+  artillery: {
+    name: "Artillerie",
+    cost: 900,
+    hp: 160,
+    speed: 32,
+    damage: 70,
+    range: 230,
+    attackCooldown: 3,
+    sightRadius: 220,
+    buildTime: 11,
+    producedBy: "war_factory",
+    color: "#b08040",
+    radius: 10,
+    splashRadius: 45,
+  },
+  aircraft: {
+    name: "Kampfhubschrauber",
+    cost: 1200,
+    hp: 150,
+    speed: 115,
+    damage: 22,
+    range: 110,
+    attackCooldown: 0.45,
+    sightRadius: 250,
+    buildTime: 12,
+    producedBy: "war_factory",
+    color: "#7a8a9a",
+    radius: 9,
+    flying: true,
   },
   harvester: {
     name: "Sammler",
@@ -72,6 +120,13 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
   },
 };
 
+export interface DefenseStats {
+  damage: number;
+  range: number; // pixels
+  attackCooldown: number; // seconds
+  sightRadius: number; // pixels
+}
+
 export interface BuildingStats {
   name: string;
   cost: number;
@@ -86,6 +141,8 @@ export interface BuildingStats {
   requires?: BuildingType;
   /** Whether this building can produce things (shown as production target). */
   producesUnits?: UnitType[];
+  /** If present, the building automatically fires at nearby enemies. */
+  defense?: DefenseStats;
 }
 
 export const BUILDING_STATS: Record<BuildingType, BuildingStats> = {
@@ -142,7 +199,29 @@ export const BUILDING_STATS: Record<BuildingType, BuildingStats> = {
     power: -50,
     color: "#8a5a5a",
     requires: "refinery",
-    producesUnits: ["tank", "harvester"],
+    producesUnits: ["tank", "artillery", "aircraft", "harvester"],
+  },
+  guard_tower: {
+    name: "Geschützturm",
+    cost: 600,
+    hp: 700,
+    width: 1,
+    height: 1,
+    buildTime: 5,
+    power: -30,
+    color: "#6a6a7a",
+    requires: "barracks",
+    defense: { damage: 26, range: 165, attackCooldown: 0.9, sightRadius: 190 },
+  },
+  wall: {
+    name: "Mauer",
+    cost: 25,
+    hp: 500,
+    width: 1,
+    height: 1,
+    buildTime: 1,
+    power: 0,
+    color: "#5a5a52",
   },
 };
 
@@ -152,4 +231,6 @@ export const BUILD_ORDER: BuildingType[] = [
   "refinery",
   "barracks",
   "war_factory",
+  "guard_tower",
+  "wall",
 ];

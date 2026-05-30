@@ -3,15 +3,19 @@ import type { Unit } from "../entities/Unit";
 
 /**
  * A deliberately simple opponent: it keeps its harvester working, trains a
- * mix of soldiers and tanks, and once it has gathered a small army it sends
- * everything at the player's base. Re-attacks in waves.
+ * mix of infantry and vehicles, occasionally reinforces its base with a
+ * guard tower, and once it has gathered a small army it sends everything at
+ * the player's base. Re-attacks in escalating waves.
  */
 export class EnemyAI {
   private decisionTimer = 0;
   private waveTimer = 0;
-  private waveThreshold = 4;
 
-  constructor(private readonly game: Game) {}
+  constructor(
+    private readonly game: Game,
+    private waveThreshold: number,
+    private readonly waveInterval: number
+  ) {}
 
   update(dt: number): void {
     this.decisionTimer -= dt;
@@ -25,9 +29,13 @@ export class EnemyAI {
     if (!fs.unitQueue) {
       const hasFactory = this.game.hasBuilding("enemy", "war_factory");
       const hasBarracks = this.game.hasBuilding("enemy", "barracks");
-      // Favour cheap soldiers, occasionally a tank if affordable.
-      if (hasFactory && fs.credits > 1200 && Math.random() < 0.5) {
+      const roll = Math.random();
+      if (hasFactory && fs.credits > 1400 && roll < 0.3) {
         fs.queueUnit("tank");
+      } else if (hasFactory && fs.credits > 1600 && roll < 0.45) {
+        fs.queueUnit("artillery");
+      } else if (hasBarracks && roll < 0.7) {
+        fs.queueUnit(roll < 0.5 ? "soldier" : "rocket_soldier");
       } else if (hasBarracks) {
         fs.queueUnit("soldier");
       }
@@ -37,8 +45,23 @@ export class EnemyAI {
     const harvesters = this.game.units.filter(
       (u) => u.faction === "enemy" && u.isHarvester
     );
-    if (harvesters.length === 0 && this.game.hasBuilding("enemy", "war_factory") && fs.credits > 1100) {
-      if (!fs.unitQueue) fs.queueUnit("harvester");
+    if (
+      harvesters.length === 0 &&
+      this.game.hasBuilding("enemy", "war_factory") &&
+      fs.credits > 1100 &&
+      !fs.unitQueue
+    ) {
+      fs.queueUnit("harvester");
+    }
+
+    // Occasionally fortify the base with a guard tower.
+    if (
+      !fs.buildingQueue &&
+      fs.credits > 2500 &&
+      this.game.hasBuilding("enemy", "barracks") &&
+      Math.random() < 0.15
+    ) {
+      fs.queueBuilding("guard_tower");
     }
 
     this.maybeLaunchWave();
@@ -58,7 +81,7 @@ export class EnemyAI {
     for (const u of army as Unit[]) {
       u.orderAttack(this.game.ctx, target);
     }
-    this.waveTimer = 25; // cooldown between waves
-    this.waveThreshold = Math.min(10, this.waveThreshold + 1); // escalate
+    this.waveTimer = this.waveInterval;
+    this.waveThreshold = Math.min(12, this.waveThreshold + 1); // escalate
   }
 }

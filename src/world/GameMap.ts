@@ -17,11 +17,15 @@ export class GameMap {
   /** True when a building occupies the tile (blocks movement & building). */
   readonly occupied: boolean[];
 
-  constructor() {
+  /** Seeded RNG so a given mission seed always produces the same map. */
+  private rng: () => number;
+
+  constructor(seed = Date.now() >>> 0) {
     const n = this.width * this.height;
     this.terrain = new Array(n).fill("grass");
     this.resources = new Array(n).fill(0);
     this.occupied = new Array(n).fill(false);
+    this.rng = mulberry32(seed);
     this.generate();
   }
 
@@ -106,9 +110,9 @@ export class GameMap {
 
     // Resource fields: a few clusters of tiberium-like tiles on grass/sand.
     for (let c = 0; c < 6; c++) {
-      const cx = 6 + Math.floor(Math.random() * (this.width - 12));
-      const cy = 6 + Math.floor(Math.random() * (this.height - 12));
-      const r = 3 + Math.floor(Math.random() * 3);
+      const cx = 6 + Math.floor(this.rng() * (this.width - 12));
+      const cy = 6 + Math.floor(this.rng() * (this.height - 12));
+      const r = 3 + Math.floor(this.rng() * 3);
       for (let ty = cy - r; ty <= cy + r; ty++) {
         for (let tx = cx - r; tx <= cx + r; tx++) {
           if (!this.inBounds(tx, ty)) continue;
@@ -116,7 +120,7 @@ export class GameMap {
           if (d > r) continue;
           const i = this.index(tx, ty);
           if (this.terrain[i] === "rock" || this.terrain[i] === "water") continue;
-          if (Math.random() < 1 - d / (r + 1)) {
+          if (this.rng() < 1 - d / (r + 1)) {
             this.resources[i] = RESOURCE_PER_TILE;
           }
         }
@@ -126,9 +130,9 @@ export class GameMap {
 
   private scatterBlobs(type: TerrainType, count: number, minR: number, maxR: number): void {
     for (let c = 0; c < count; c++) {
-      const cx = Math.floor(Math.random() * this.width);
-      const cy = Math.floor(Math.random() * this.height);
-      const r = minR + Math.floor(Math.random() * (maxR - minR + 1));
+      const cx = Math.floor(this.rng() * this.width);
+      const cy = Math.floor(this.rng() * this.height);
+      const r = minR + Math.floor(this.rng() * (maxR - minR + 1));
       for (let ty = cy - r; ty <= cy + r; ty++) {
         for (let tx = cx - r; tx <= cx + r; tx++) {
           if (!this.inBounds(tx, ty)) continue;
@@ -150,4 +154,16 @@ export class GameMap {
       }
     }
   }
+}
+
+/** Small, fast, seedable PRNG (mulberry32). */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }

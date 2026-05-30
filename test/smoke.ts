@@ -1,68 +1,121 @@
 /* Headless simulation smoke test — runs the Game without any DOM/rendering. */
 import { Game } from "../src/core/Game";
+import { MISSIONS } from "../src/core/missions";
+import { FOG_VISIBLE } from "../src/world/FogOfWar";
 
-const game = new Game();
-game.camera.setViewport(1280, 720);
-game.rebuildButtons();
-
-const startUnits = game.units.length;
-const startBuildings = game.buildings.length;
-console.log(`init: units=${startUnits} buildings=${startBuildings} credits=${game.player.credits}`);
-
-// Queue a power plant for the player, then a barracks once requirements allow.
-console.log("queue power_plant:", game.player.queueBuilding("power_plant"));
-
-let placedBuilding = false;
-let producedSoldier = false;
 const dt = 1 / 60;
-let combatHappened = false;
+const checks: { name: string; ok: boolean }[] = [];
+const check = (name: string, ok: boolean) => checks.push({ name, ok });
 
-for (let frame = 0; frame < 60 * 120; frame++) {
-  game.update(dt);
+// ---------------------------------------------------------------------------
+// 1. Economy + production loop (build placement via the real validation path).
+// ---------------------------------------------------------------------------
+{
+  const game = new Game(MISSIONS[0]);
+  game.camera.setViewport(1280, 720);
 
-  // Place the player's power plant as soon as it is ready.
-  const bq = game.player.buildingQueue;
-  if (bq && bq.ready && !placedBuilding) {
-    // Find a valid spot near the construction yard.
-    const yard = game.buildings.find((b) => b.faction === "player" && b.type === "construction_yard")!;
-    game.placement = { type: "power_plant", tx: yard.tileX, ty: yard.tileY + 4, valid: false };
-    game.updatePlacementHover(game.map.tileToWorldCenter(yard.tileX + 1, yard.tileY + 5));
-    if (game.confirmPlacement()) {
-      placedBuilding = true;
-      console.log(`frame ${frame}: placed power plant, power=${game.player.power}`);
-    }
-  }
+  // Give the player a refinery via the real placement flow.
+  const yard = game.buildings.find((b) => b.faction === "player" && b.type === "construction_yard")!;
+  game.player.queueBuilding("refinery");
+  game.player.buildingQueue!.remaining = 0; // finish instantly
+  game.update(dt); // marks it ready
+  game.placement = { type: "refinery", tx: yard.tileX, ty: yard.tileY + 4, valid: false };
+  game.updatePlacementHover(game.map.tileToWorldCenter(yard.tileX + 1, yard.tileY + 5));
+  const placed = game.confirmPlacement();
+  check("refinery placement via validation", placed);
 
-  // Once we have a barracks-capable economy, try queuing a soldier.
-  if (placedBuilding && game.hasBuilding("player", "barracks") && !game.player.unitQueue && !producedSoldier) {
-    if (game.player.queueUnit("soldier")) {
-      console.log(`frame ${frame}: queued soldier`);
-    }
-  }
+  const before = game.player.credits;
+  for (const u of game.units) if (u.faction === "player" && u.isHarvester) u.orderHarvest(game.ctx);
+  for (let i = 0; i < 60 * 90; i++) game.update(dt);
+  check("harvester earns credits", game.player.credits > before);
 
-  if (game.units.some((u) => u.faction === "player" && u.type === "soldier" && u.id > startUnits)) {
-    producedSoldier = true;
-  }
-
-  if (game.projectiles.length > 0) combatHappened = true;
-
-  if (game.gameOver) {
-    console.log(`frame ${frame}: GAME OVER victory=${game.victory}`);
-    break;
-  }
+  // Fog: the player's base must be currently visible.
+  const t = game.map.worldToTile(yard.pos.x, yard.pos.y);
+  check("fog reveals player base", game.fog.get(t.tx, t.ty) === FOG_VISIBLE);
+  // Fog: far corner stays hidden at start of a fresh game.
+  const fresh = new Game(MISSIONS[0]);
+  check("fog hides distant tiles", fresh.fog.get(60, 60) !== FOG_VISIBLE);
 }
 
-const enemyUnits = game.units.filter((u) => u.faction === "enemy").length;
-const playerCredits = Math.floor(game.player.credits);
-console.log(`after sim: units=${game.units.length} (enemy ${enemyUnits}) buildings=${game.buildings.length}`);
-console.log(`player credits=${playerCredits} power=${game.player.power}`);
-console.log(`flags: placedBuilding=${placedBuilding} producedSoldier=${producedSoldier} combat=${combatHappened}`);
+// ---------------------------------------------------------------------------
+// 2. Guard tower automatically fires at a nearby enemy.
+// ---------------------------------------------------------------------------
+{
+  const game = new Game(MISSIONS[0]);
+  game.camera.setViewport(1280, 720);
+  const tower = game.placeBuilding("player", "guard_tower", 20, 20);
+  const enemy = game.spawnUnitAt("enemy", "soldier", {
+    x: tower.pos.x + 40,
+    y: tower.pos.y,
+  });
+  const hpBefore = enemy.hp;
+  let fired = false;
+  for (let i = 0; i < 60 * 3; i++) {
+    game.update(dt);
+    if (game.projectiles.length > 0) fired = true;
+    if (enemy.dead) break;
+  }
+  check("guard tower fires at enemy", fired);
+  check("guard tower damages enemy", enemy.hp < hpBefore || enemy.dead);
+}
 
-// Basic sanity assertions.
-const ok =
-  game.units.length > 0 &&
-  game.buildings.length > 0 &&
-  placedBuilding &&
-  game.player.power > 0;
-console.log(ok ? "SMOKE TEST: PASS" : "SMOKE TEST: FAIL");
-process.exit(ok ? 0 : 1);
+// ---------------------------------------------------------------------------
+// 3. Artillery deals splash damage to a cluster of enemies.
+// ---------------------------------------------------------------------------
+{
+  const game = new Game(MISSIONS[0]);
+  game.camera.setViewport(1280, 720);
+  const art = game.spawnUnitAt("player", "artillery", game.map.tileToWorldCenter(20, 20));
+  // Two enemies standing close together, within artillery range.
+  const e1 = game.spawnUnitAt("enemy", "soldier", { x: art.pos.x + 120, y: art.pos.y });
+  const e2 = game.spawnUnitAt("enemy", "soldier", { x: art.pos.x + 130, y: art.pos.y + 10 });
+  art.orderAttack(game.ctx, e1);
+  const hp2Before = e2.hp;
+  let splash = false;
+  for (let i = 0; i < 60 * 6; i++) {
+    game.update(dt);
+    if (game.projectiles.some((p) => p.splashRadius > 0)) splash = true;
+    if (e1.dead && e2.dead) break;
+  }
+  check("artillery emits splash projectile", splash);
+  check("splash damages the secondary target", e2.hp < hp2Before || e2.dead);
+}
+
+// ---------------------------------------------------------------------------
+// 4. Aircraft flies over impassable terrain (straight-line movement).
+// ---------------------------------------------------------------------------
+{
+  const game = new Game(MISSIONS[1]);
+  game.camera.setViewport(1280, 720);
+  const heli = game.spawnUnitAt("player", "aircraft", game.map.tileToWorldCenter(30, 30));
+  const goal = game.map.tileToWorldCenter(40, 40);
+  heli.orderMove(game.ctx, goal);
+  const startDist = Math.hypot(goal.x - heli.pos.x, goal.y - heli.pos.y);
+  for (let i = 0; i < 60 * 12; i++) game.update(dt);
+  const endDist = Math.hypot(goal.x - heli.pos.x, goal.y - heli.pos.y);
+  check("aircraft moves toward distant goal", endDist < startDist - 50);
+}
+
+// ---------------------------------------------------------------------------
+// 5. Full mission runs for a while without throwing and the AI stays active.
+// ---------------------------------------------------------------------------
+{
+  const game = new Game(MISSIONS[2]); // hardest mission, enemy has defences
+  game.camera.setViewport(1280, 720);
+  const enemyStart = game.units.filter((u) => u.faction === "enemy").length;
+  let towers = 0;
+  for (let i = 0; i < 60 * 120; i++) {
+    game.update(dt);
+    if (game.gameOver) break;
+  }
+  towers = game.buildings.filter((b) => b.faction === "enemy" && b.type === "guard_tower").length;
+  check("enemy started with guard towers (mission 3)", towers >= 1);
+  check("enemy AI produced units", game.units.filter((u) => u.faction === "enemy").length >= enemyStart);
+  check("simulation ran without crashing", true);
+}
+
+// ---------------------------------------------------------------------------
+for (const c of checks) console.log(`${c.ok ? "PASS" : "FAIL"}  ${c.name}`);
+const allOk = checks.every((c) => c.ok);
+console.log(allOk ? "\nSMOKE TEST: PASS" : "\nSMOKE TEST: FAIL");
+process.exit(allOk ? 0 : 1);

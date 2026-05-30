@@ -16,8 +16,17 @@ export interface GameContext {
   /** Add credits to a faction's account. */
   addCredits(faction: Faction, amount: number): void;
 
-  /** Spawn a visual projectile/tracer from -> to dealing damage on arrival. */
-  spawnProjectile(from: Vec2, to: Vec2, damage: number, target: Entity): void;
+  /**
+   * Spawn a visual projectile/tracer from -> to dealing damage on arrival.
+   * If `splashRadius` > 0 the damage is applied to all enemies in that radius.
+   */
+  spawnProjectile(
+    from: Vec2,
+    to: Vec2,
+    damage: number,
+    target: Entity,
+    splashRadius?: number
+  ): void;
 
   /** Find the nearest live enemy entity within `range` pixels of `pos`. */
   findNearestEnemy(faction: Faction, pos: Vec2, range: number): Entity | null;

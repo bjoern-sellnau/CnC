@@ -9,38 +9,70 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 
 ## Features
 
-- **Tile-basierte Karte** (64×64) mit zufällig generiertem Terrain
+- **Startmenü mit 3 Missionen** unterschiedlicher Schwierigkeit (eigene Karten
+  per Seed, mehr Gegner-Credits, aggressivere Wellen, befestigte Gegnerbasis).
+- **Nebel des Krieges**: unerkundetes Gebiet ist schwarz, erkundetes bleibt
+  abgedunkelt sichtbar, gegnerische Einheiten erscheinen nur im aktuellen Sichtfeld.
+- **Tile-basierte Karte** (64×64) mit prozedural generiertem Terrain
   (Gras, Sand, Fels, Wasser) und Tiberium-artigen Ressourcenfeldern.
-- **Einheiten mit A\*-Wegfindung**: Soldaten, Panzer und Sammler.
+- **6 Einheitentypen mit A\*-Wegfindung**, inkl. Flug- und Artillerie-Einheiten.
   Auswahl per Klick oder Auswahlrechteck, Befehle per Rechtsklick.
-- **Basisbau**: Bauhof, Kraftwerk, Raffinerie, Kaserne und Waffenfabrik
-  mit Tech-Tree (Voraussetzungen) und Strom-Wirtschaft.
+- **7 Gebäudetypen** mit Tech-Tree und Strom-Wirtschaft, inkl. Verteidigung.
 - **Ressourcen-Kreislauf**: Sammler ernten Tiberium, bringen es zur
   Raffinerie und füllen das Konto.
-- **Kampfsystem**: Reichweite, Schaden, Trefferpunkte, Geschosse und
-  Explosionen. Einheiten greifen Gegner in Sichtweite automatisch an.
-- **Gegner-KI**: baut Einheiten, sammelt Ressourcen und greift in
-  eskalierenden Wellen die Spielerbasis an.
+- **Kampfsystem**: Reichweite, Schaden, Trefferpunkte, Geschosse, Explosionen
+  und **Flächenschaden** (Artillerie). Einheiten und Geschütztürme greifen
+  Gegner in Reichweite automatisch an.
+- **Gegner-KI**: baut Einheiten, sammelt Ressourcen, befestigt ihre Basis und
+  greift in eskalierenden Wellen an.
+- **Sound** komplett prozedural über die Web Audio API erzeugt (keine Dateien).
 - **HUD**: Seitenleiste mit Bau-Menü, Credits-/Stromanzeige und Minimap.
+
+## Einheiten
+
+| Einheit | Rolle | Bau in |
+| --- | --- | --- |
+| Soldat | Günstige Standard-Infanterie | Kaserne |
+| Raketensoldat | Anti-Fahrzeug-Infanterie, hohe Reichweite | Kaserne |
+| Panzer | Robuste Hauptkampfeinheit | Waffenfabrik |
+| Artillerie | Lange Reichweite, **Flächenschaden**, langsam | Waffenfabrik |
+| Kampfhubschrauber | Schnell, **fliegt** über Hindernisse | Waffenfabrik |
+| Sammler | Erntet Tiberium für Credits | Waffenfabrik |
+
+## Gebäude
+
+| Gebäude | Funktion | Voraussetzung |
+| --- | --- | --- |
+| Bauhof | Zentrum der Basis | – |
+| Kraftwerk | Liefert Strom | – |
+| Raffinerie | Sammler laden hier ab | Kraftwerk |
+| Kaserne | Produziert Infanterie | Kraftwerk |
+| Waffenfabrik | Produziert Fahrzeuge & Flugzeuge | Raffinerie |
+| Geschützturm | Feuert automatisch auf Gegner | Kaserne |
+| Mauer | Blockiert gegnerische Einheiten | – |
 
 ## Steuerung
 
 | Aktion | Eingabe |
 | --- | --- |
+| Mission wählen | Im Startmenü auf eine Missionskarte klicken |
 | Kamera bewegen | `WASD` / Pfeiltasten / Maus an den Bildschirmrand |
 | Einheit(en) auswählen | Linksklick / Auswahlrechteck ziehen |
 | Mehrfachauswahl | `Shift` + Linksklick |
 | Bewegen / Angreifen / Ernten | Rechtsklick (Ziel bestimmt die Aktion) |
 | Gebäude bauen | Button in der Seitenleiste klicken → erneut klicken, wenn „BEREIT“ → auf der Karte platzieren |
 | Platzierung abbrechen | `Esc` oder Rechtsklick |
+| Sound an/aus | `M` (oder Schalter im Menü) |
+| Zurück ins Menü | Klick auf den Sieg-/Niederlage-Bildschirm |
 
 ## Spielablauf
 
-1. Baue ein **Kraftwerk** für Strom.
-2. Baue eine **Raffinerie**, damit dein Sammler Credits einbringt.
-3. Baue eine **Kaserne** (Soldaten) und eine **Waffenfabrik** (Panzer & Sammler).
-4. Stelle eine Armee auf und zerstöre die gegnerische Basis, bevor die
-   Angriffswellen deine zerstören.
+1. Baue eine **Raffinerie**, damit dein Sammler Credits einbringt
+   (achte auf genug **Strom** durch Kraftwerke).
+2. Baue eine **Kaserne** (Infanterie) und eine **Waffenfabrik**
+   (Panzer, Artillerie, Hubschrauber, Sammler).
+3. Sichere deine Basis mit **Geschütztürmen** und **Mauern** gegen die Wellen.
+4. Stelle eine Armee auf und zerstöre die gegnerische Basis.
 
 Sieg: alle gegnerischen Gebäude zerstören. Niederlage: alle eigenen Gebäude verlieren.
 
@@ -58,26 +90,31 @@ npm test         # Headless-Simulations-Smoke-Test
 
 ```
 src/
-  main.ts              Einstiegspunkt & Game-Loop
+  main.ts              Einstiegspunkt, Menü-/Spiel-Zustandsmaschine & Game-Loop
   core/
     Game.ts            Zentrale Spiellogik (implementiert GameContext)
     Input.ts           Maus-/Tastatursteuerung
     config.ts          Tuning-Werte & Einheiten-/Gebäude-Tabellen
+    missions.ts        Missions-/Karten-Definitionen
     types.ts           Gemeinsame Typen
   world/
-    GameMap.ts         Tile-Karte, Terrain & Ressourcen
+    GameMap.ts         Tile-Karte, Terrain & Ressourcen (seedbar)
+    FogOfWar.ts        Sichtbarkeit / Nebel des Krieges
     Camera.ts          Viewport / Scrolling
     Pathfinding.ts     A*-Wegfindung
   entities/
     Entity.ts          Basisklasse
-    Unit.ts            Bewegung, Kampf, Sammler-Logik
-    Building.ts        Gebäude mit Grundfläche
+    Unit.ts            Bewegung, Kampf, Flug- & Sammler-Logik
+    Building.ts        Gebäude mit Grundfläche & Verteidigung
   systems/
     FactionState.ts    Wirtschaft & Produktionswarteschlangen
     EnemyAI.ts         Gegner-KI
+    Sound.ts           Prozedurale Soundeffekte (Web Audio)
     effects.ts         Geschosse & Explosionen
-  render/Renderer.ts   Zeichnet Welt, Einheiten & HUD
-  ui/layout.ts         Seitenleisten-Layout
+  render/Renderer.ts   Zeichnet Welt, Einheiten, Nebel & HUD
+  ui/
+    layout.ts          Seitenleisten-Layout
+    Menu.ts            Startmenü mit Missionsauswahl
 ```
 
 > Hinweis: Dies ist eine eigenständige Hommage und steht in keiner Verbindung
