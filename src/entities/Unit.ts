@@ -54,6 +54,10 @@ export class Unit extends Entity {
     return UNIT_STATS[this.type].flying === true;
   }
 
+  get isInfantry(): boolean {
+    return this.type === "soldier" || this.type === "rocket_soldier";
+  }
+
   /** Player/AI command: move to a world position. Clears combat intent. */
   orderMove(ctx: GameContext, goal: Vec2): void {
     this.attackTarget = null;

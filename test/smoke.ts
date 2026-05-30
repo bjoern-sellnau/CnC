@@ -133,6 +133,72 @@ const check = (name: string, ok: boolean) => checks.push({ name, ok });
 }
 
 // ---------------------------------------------------------------------------
+// 6. Parallel production: more producing buildings => more units at once.
+// ---------------------------------------------------------------------------
+{
+  // Two barracks build two soldiers simultaneously.
+  const g = new Game(MISSIONS[0]);
+  g.camera.setViewport(1280, 720);
+  g.placeBuilding("player", "barracks", 20, 20);
+  g.placeBuilding("player", "barracks", 24, 20);
+  g.player.credits = 10000;
+  g.player.queueUnit("soldier");
+  g.player.queueUnit("soldier");
+  g.update(dt);
+  const bothProgressing =
+    g.player.unitQueue.length === 2 && g.player.unitQueue.every((i) => i.remaining < i.total);
+  check("two barracks build two soldiers in parallel", bothProgressing);
+
+  // A single barracks builds them one at a time.
+  const g2 = new Game(MISSIONS[0]);
+  g2.camera.setViewport(1280, 720);
+  g2.placeBuilding("player", "barracks", 20, 20);
+  g2.player.credits = 10000;
+  g2.player.queueUnit("soldier");
+  g2.player.queueUnit("soldier");
+  g2.update(dt);
+  const first = g2.player.unitQueue[0].remaining < g2.player.unitQueue[0].total;
+  const second = g2.player.unitQueue[1].remaining < g2.player.unitQueue[1].total;
+  check("single barracks builds serially", first && !second);
+
+  // Infantry and vehicles use independent production lines.
+  const g3 = new Game(MISSIONS[0]);
+  g3.camera.setViewport(1280, 720);
+  g3.placeBuilding("player", "barracks", 20, 20);
+  g3.placeBuilding("player", "war_factory", 24, 20);
+  g3.player.credits = 10000;
+  g3.player.queueUnit("soldier");
+  g3.player.queueUnit("tank");
+  g3.update(dt);
+  check("infantry and vehicles build concurrently", g3.player.unitQueue.every((i) => i.remaining < i.total));
+}
+
+// ---------------------------------------------------------------------------
+// 7. Particle system: hits and deaths emit particles; infantry bleed red.
+// ---------------------------------------------------------------------------
+{
+  const RED = new Set(["#c01818", "#e23a2a", "#8a0f0f", "#5a0a0a"]);
+  const game = new Game(MISSIONS[0]);
+  game.camera.setViewport(1280, 720);
+  const tower = game.placeBuilding("player", "guard_tower", 20, 20);
+  const enemy = game.spawnUnitAt("enemy", "soldier", { x: tower.pos.x + 40, y: tower.pos.y });
+  let sawParticles = false;
+  let sawRed = false;
+  for (let i = 0; i < 60 * 5; i++) {
+    game.update(dt);
+    if (game.particles.length > 0) sawParticles = true;
+    if (game.particles.some((p) => RED.has(p.color))) sawRed = true;
+    if (enemy.dead && sawRed) break;
+  }
+  check("hits/deaths emit particles", sawParticles);
+  check("infantry produce red particles", sawRed);
+
+  // Particles expire (no unbounded growth).
+  for (let i = 0; i < 60 * 4; i++) game.update(dt);
+  check("particles expire over time", game.particles.length < 400);
+}
+
+// ---------------------------------------------------------------------------
 for (const c of checks) console.log(`${c.ok ? "PASS" : "FAIL"}  ${c.name}`);
 const allOk = checks.every((c) => c.ok);
 console.log(allOk ? "\nSMOKE TEST: PASS" : "\nSMOKE TEST: FAIL");

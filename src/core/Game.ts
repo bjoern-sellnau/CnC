@@ -4,7 +4,7 @@ import { FogOfWar } from "../world/FogOfWar";
 import { Building } from "../entities/Building";
 import { Unit } from "../entities/Unit";
 import { Entity } from "../entities/Entity";
-import { Explosion, Projectile } from "../systems/effects";
+import { Explosion, Particle, Projectile } from "../systems/effects";
 import { FactionState } from "../systems/FactionState";
 import { EnemyAI } from "../systems/EnemyAI";
 import { sound } from "../systems/Sound";
@@ -39,6 +39,7 @@ export class Game implements GameContext {
   readonly buildings: Building[] = [];
   readonly projectiles: Projectile[] = [];
   readonly explosions: Explosion[] = [];
+  readonly particles: Particle[] = [];
 
   readonly player: FactionState;
   readonly enemy: FactionState;
@@ -49,6 +50,10 @@ export class Game implements GameContext {
 
   buttons: ButtonRect[] = [];
   hoveredButton: ButtonRect | null = null;
+
+  /** Entity currently under the cursor (for tooltips) and pointer position. */
+  hoveredEntity: Entity | null = null;
+  pointer = { x: 0, y: 0 };
 
   gameOver = false;
   victory = false;
@@ -182,20 +187,31 @@ export class Game implements GameContext {
   /** Whether the player is currently producing `what`. */
   isProducing(what: ProducibleType): boolean {
     return (
-      this.player.unitQueue?.what === what || this.player.buildingQueue?.what === what
+      this.player.buildingQueue?.what === what ||
+      this.player.unitQueue.some((i) => i.what === what)
     );
   }
 
-  /** Production progress 0..1 for `what`, or null if not in queue. */
+  /** How many of `what` the player has queued (for the sidebar badge). */
+  queuedCount(what: ProducibleType): number {
+    let n = this.player.unitQueue.reduce((acc, i) => (i.what === what ? acc + 1 : acc), 0);
+    if (this.player.buildingQueue?.what === what) n++;
+    return n;
+  }
+
+  /** Production progress 0..1 for `what` (the item finishing soonest), or null. */
   productionProgress(what: ProducibleType): number | null {
-    const q =
-      this.player.unitQueue?.what === what
-        ? this.player.unitQueue
-        : this.player.buildingQueue?.what === what
-        ? this.player.buildingQueue
-        : null;
-    if (!q) return null;
-    return 1 - q.remaining / q.total;
+    if (this.player.buildingQueue?.what === what) {
+      const q = this.player.buildingQueue;
+      return 1 - q.remaining / q.total;
+    }
+    let best: number | null = null;
+    for (const i of this.player.unitQueue) {
+      if (i.what !== what) continue;
+      const p = 1 - i.remaining / i.total;
+      if (best === null || p > best) best = p;
+    }
+    return best;
   }
 
   // ---- Commands (called from input) --------------------------------------
@@ -360,6 +376,7 @@ export class Game implements GameContext {
       });
     }
     for (const e of this.explosions) if (!e.dead) e.update(dt);
+    for (const p of this.particles) if (!p.dead) p.update(dt);
   }
 
   private applyProjectileDamage(proj: Projectile): void {
@@ -376,11 +393,62 @@ export class Game implements GameContext {
         }
       }
       this.spawnExplosion(impact, proj.splashRadius);
+      this.emitHitParticles(impact, proj.target);
     } else if (!proj.target.dead) {
       proj.target.takeDamage(proj.damage);
       this.spawnExplosion(impact, proj.target.kind === "building" ? 14 : 8);
+      this.emitHitParticles(proj.target.pos, proj.target);
     }
     if (this.fog.isVisibleAt(impact)) sound.play("explosion");
+  }
+
+  /** Spatter on impact: red blood for infantry, sparks/debris for the rest. */
+  private emitHitParticles(at: Vec2, target: Entity): void {
+    const infantry = target instanceof Unit && target.isInfantry;
+    if (infantry) {
+      this.emitBurst(at, 8, ["#c01818", "#e23a2a", "#8a0f0f"], 70, 0.5, 2.2);
+    } else {
+      this.emitBurst(at, 6, ["#ffd24a", "#ff9b3d", "#cfcfcf"], 90, 0.35, 1.8);
+    }
+  }
+
+  /** Larger burst when something is destroyed. */
+  private emitDeathParticles(e: Entity): void {
+    if (e instanceof Unit && e.isInfantry) {
+      this.emitBurst(e.pos, 16, ["#c01818", "#e23a2a", "#8a0f0f", "#5a0a0a"], 95, 0.8, 3);
+    } else if (e.kind === "building") {
+      this.emitBurst(e.pos, 34, ["#ff9b3d", "#ffd24a", "#888", "#444", "#222"], 150, 1.1, e.radius * 0.5);
+    } else {
+      // Vehicles / aircraft: fiery debris.
+      this.emitBurst(e.pos, 22, ["#ff9b3d", "#ffd24a", "#999", "#333"], 130, 0.9, 4);
+    }
+  }
+
+  /** Emit `count` particles radiating from `pos`. */
+  private emitBurst(
+    pos: Vec2,
+    count: number,
+    colors: string[],
+    speed: number,
+    life: number,
+    spread: number
+  ): void {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const sp = speed * (0.3 + Math.random() * 0.7);
+      const color = colors[(Math.random() * colors.length) | 0];
+      this.particles.push(
+        new Particle(
+          { x: pos.x + (Math.random() - 0.5) * spread, y: pos.y + (Math.random() - 0.5) * spread },
+          Math.cos(angle) * sp,
+          Math.sin(angle) * sp,
+          life * (0.6 + Math.random() * 0.8),
+          1 + Math.random() * 2.5,
+          color,
+          120 // gravity so debris arcs down
+        )
+      );
+    }
   }
 
   private recomputePower(): void {
@@ -396,19 +464,18 @@ export class Game implements GameContext {
     }
   }
 
+  countBuildings(faction: Faction, type: BuildingType): number {
+    let n = 0;
+    for (const b of this.buildings) if (!b.dead && b.faction === faction && b.type === type) n++;
+    return n;
+  }
+
   private tickProduction(dt: number, fs: FactionState): void {
-    const speed = fs.productionSpeedFactor;
-    // Units.
-    if (fs.unitQueue && !fs.unitQueue.ready) {
-      fs.unitQueue.remaining -= dt * speed;
-      if (fs.unitQueue.remaining <= 0) {
-        this.produceUnit(fs.faction, fs.unitQueue.what as UnitType);
-        fs.unitQueue = null;
-      }
-    }
+    const step = dt * fs.productionSpeedFactor;
+    this.tickUnitProduction(step, fs);
     // Buildings.
     if (fs.buildingQueue && !fs.buildingQueue.ready) {
-      fs.buildingQueue.remaining -= dt * speed;
+      fs.buildingQueue.remaining -= step;
       if (fs.buildingQueue.remaining <= 0) {
         fs.buildingQueue.remaining = 0;
         if (fs.faction === "enemy") {
@@ -419,6 +486,36 @@ export class Game implements GameContext {
           sound.play("ready");
         }
       }
+    }
+  }
+
+  /**
+   * Advance the unit queue. Items are grouped by their producer building type;
+   * each producer type can build as many units in parallel as the faction has
+   * buildings of that type. So two barracks train two soldiers at once.
+   */
+  private tickUnitProduction(step: number, fs: FactionState): void {
+    if (fs.unitQueue.length === 0) return;
+    const slotsUsed = new Map<BuildingType, number>();
+    const completed: number[] = [];
+
+    for (let i = 0; i < fs.unitQueue.length; i++) {
+      const item = fs.unitQueue[i];
+      const producer = UNIT_STATS[item.what as UnitType].producedBy;
+      const capacity = this.countBuildings(fs.faction, producer);
+      const used = slotsUsed.get(producer) ?? 0;
+      if (used >= capacity) continue; // every producer of this type is busy
+      slotsUsed.set(producer, used + 1);
+      item.remaining -= step;
+      if (item.remaining <= 0) completed.push(i);
+    }
+
+    // Spawn finished units in queue order, then remove them.
+    for (const idx of completed) {
+      this.produceUnit(fs.faction, fs.unitQueue[idx].what as UnitType);
+    }
+    for (let k = completed.length - 1; k >= 0; k--) {
+      fs.unitQueue.splice(completed[k], 1);
     }
   }
 
@@ -446,7 +543,9 @@ export class Game implements GameContext {
       const u = this.units[i];
       if (u.dead) {
         this.selected.delete(u);
+        if (this.hoveredEntity === u) this.hoveredEntity = null;
         this.spawnExplosion(u.pos, u.radius * 1.5);
+        this.emitDeathParticles(u);
         this.units.splice(i, 1);
       }
     }
@@ -454,7 +553,9 @@ export class Game implements GameContext {
       const b = this.buildings[i];
       if (b.dead) {
         for (const t of b.tiles()) this.map.setOccupied(t.tx, t.ty, false);
+        if (this.hoveredEntity === b) this.hoveredEntity = null;
         this.spawnExplosion(b.pos, b.radius);
+        this.emitDeathParticles(b);
         this.buildings.splice(i, 1);
       }
     }
@@ -463,6 +564,9 @@ export class Game implements GameContext {
     }
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       if (this.explosions[i].dead) this.explosions.splice(i, 1);
+    }
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      if (this.particles[i].dead) this.particles.splice(i, 1);
     }
   }
 

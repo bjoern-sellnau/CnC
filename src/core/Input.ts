@@ -112,6 +112,42 @@ export class InputController {
         h: Math.abs(this.mouse.y - this.dragStart.y),
       };
     }
+
+    // Track the entity under the cursor for tooltips.
+    this.game.pointer = { x: this.mouse.x, y: this.mouse.y };
+    this.game.hoveredEntity = this.hoverEntity();
+  }
+
+  /** Entity under the cursor for tooltips (respects fog of war). */
+  private hoverEntity(): Entity | null {
+    if (this.inSidebar(this.mouse.x) || this.game.placement || this.dragStart) return null;
+    const world = this.game.camera.screenToWorld(this.mouse.x, this.mouse.y);
+    const u = this.unitAt(world);
+    if (u && (u.faction === "player" || this.game.fog.isVisibleAt(u.pos))) return u;
+    const b = this.buildingAt(world);
+    if (b && (b.faction === "player" || !this.game.fog.enabled || !this.fogHidden(b.pos))) return b;
+    return null;
+  }
+
+  private buildingAt(world: Vec2): Entity | null {
+    for (const b of this.game.buildings) {
+      const left = b.tileX * TILE_SIZE;
+      const top = b.tileY * TILE_SIZE;
+      if (
+        world.x >= left &&
+        world.x <= left + b.tileW * TILE_SIZE &&
+        world.y >= top &&
+        world.y <= top + b.tileH * TILE_SIZE
+      ) {
+        return b;
+      }
+    }
+    return null;
+  }
+
+  private fogHidden(pos: Vec2): boolean {
+    const t = this.game.map.worldToTile(pos.x, pos.y);
+    return this.game.fog.get(t.tx, t.ty) === 0; // FOG_HIDDEN
   }
 
   private onMouseUp(e: MouseEvent): void {

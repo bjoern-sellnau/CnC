@@ -23,6 +23,13 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 - **Kampfsystem**: Reichweite, Schaden, Trefferpunkte, Geschosse, Explosionen
   und **Flächenschaden** (Artillerie). Einheiten und Geschütztürme greifen
   Gegner in Reichweite automatisch an.
+- **Partikeleffekte** bei Treffern und Explosionen – Infanterie blutet rot,
+  Fahrzeuge/Gebäude werfen Trümmer und Funken.
+- **Tooltips**: Mauszeiger über eine Einheit/Gebäude zeigt Name, HP & Werte
+  (gegnerische nur im Sichtfeld).
+- **Parallele Produktion**: mehrere Kasernen bzw. Waffenfabriken bauen
+  entsprechend mehr Einheiten gleichzeitig; Infanterie und Fahrzeuge laufen
+  ohnehin auf getrennten Produktionslinien.
 - **Gegner-KI**: baut Einheiten, sammelt Ressourcen, befestigt ihre Basis und
   greift in eskalierenden Wellen an.
 - **Sound** komplett prozedural über die Web Audio API erzeugt (keine Dateien).

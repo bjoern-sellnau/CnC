@@ -1,6 +1,8 @@
 import type { Game } from "../core/Game";
-import { BUILDING_STATS, MAP_HEIGHT, MAP_WIDTH, TILE_SIZE } from "../core/config";
+import { BUILDING_STATS, MAP_HEIGHT, MAP_WIDTH, TILE_SIZE, UNIT_STATS } from "../core/config";
 import type { TerrainType } from "../core/types";
+import { Unit } from "../entities/Unit";
+import { Building } from "../entities/Building";
 import { FOG_EXPLORED, FOG_HIDDEN, FOG_VISIBLE } from "../world/FogOfWar";
 import { MINIMAP, SIDEBAR_WIDTH } from "../ui/layout";
 
@@ -33,9 +35,11 @@ export class Renderer {
     this.drawUnits();
     this.drawProjectiles();
     this.drawExplosions();
+    this.drawParticles();
     this.drawFog();
     this.drawSelectionBox();
     this.drawHud();
+    this.drawTooltip();
 
     if (game.gameOver) this.drawGameOver();
   }
@@ -230,6 +234,86 @@ export class Renderer {
     }
   }
 
+  /** Floating info box for the entity currently under the cursor. */
+  private drawTooltip(): void {
+    const { ctx, game } = this;
+    const e = game.hoveredEntity;
+    if (!e || e.dead || game.gameOver) return;
+
+    const title = e instanceof Unit ? UNIT_STATS[e.type].name : (e as Building).stats.name;
+    const factionLabel = e.faction === "player" ? "Eigen" : "Feind";
+    const lines: string[] = [`HP ${Math.ceil(e.hp)}/${e.maxHp}`];
+
+    if (e instanceof Unit) {
+      const s = UNIT_STATS[e.type];
+      if (e.isHarvester) lines.push(`Ladung ${Math.floor(e.cargo)}`);
+      else lines.push(`Schaden ${s.damage} · Rw ${Math.round(s.range)}`);
+    } else if (e instanceof Building) {
+      const p = e.stats.power;
+      if (p !== 0) lines.push(p > 0 ? `Strom +${p}` : `Strom ${p}`);
+      if (e.isDefensive) lines.push("Verteidigung");
+    }
+
+    ctx.font = "12px monospace";
+    const titleW = ctx.measureText(title).width;
+    let w = Math.max(titleW, ...lines.map((l) => ctx.measureText(l).width)) + 16;
+    const h = 30 + lines.length * 15;
+
+    let x = game.pointer.x + 16;
+    let y = game.pointer.y + 16;
+    // Keep the box on screen and clear of the sidebar.
+    const maxX = game.camera.viewportWidth - SIDEBAR_WIDTH - w - 4;
+    if (x > maxX) x = game.pointer.x - w - 16;
+    if (x < 4) x = 4;
+    if (y + h > game.camera.viewportHeight - 4) y = game.pointer.y - h - 16;
+
+    ctx.fillStyle = "rgba(10, 14, 8, 0.92)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = e.faction === "player" ? "#5fd0ff" : "#ff6a5f";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#e8f0d8";
+    ctx.font = "bold 12px monospace";
+    ctx.fillText(title, x + 8, y + 16);
+    ctx.fillStyle = e.faction === "player" ? "#7fb0c0" : "#c08070";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(factionLabel, x + w - 8, y + 14);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#aaba98";
+    ctx.font = "11px monospace";
+    let ly = y + 32;
+    for (const l of lines) {
+      ctx.fillText(l, x + 8, ly);
+      ly += 15;
+    }
+
+    // Health bar inside the tooltip.
+    const barW = w - 16;
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(x + 8, y + h - 7, barW, 3);
+    const f = e.healthFraction;
+    ctx.fillStyle = f > 0.5 ? "#5fd05f" : f > 0.25 ? "#e0c040" : "#d04040";
+    ctx.fillRect(x + 8, y + h - 7, barW * f, 3);
+  }
+
+  private drawParticles(): void {
+    const { ctx, game } = this;
+    const cam = game.camera;
+    for (const p of game.particles) {
+      const sx = p.pos.x - cam.x;
+      const sy = p.pos.y - cam.y;
+      if (sx < -10 || sy < -10 || sx > cam.viewportWidth + 10 || sy > cam.viewportHeight + 10) continue;
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
+      ctx.fillStyle = p.color;
+      ctx.fillRect(sx - p.size / 2, sy - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   private fogHidden(wx: number, wy: number): boolean {
     if (!this.game.fog.enabled) return false;
     const t = this.game.map.worldToTile(wx, wy);
@@ -385,12 +469,21 @@ export class Renderer {
       if (prog !== null) {
         ctx.fillStyle = "rgba(120, 220, 140, 0.25)";
         ctx.fillRect(btn.x, btn.y, btn.w * prog, btn.h);
-        if (prog >= 1) {
+        if (prog >= 1 && btn.category === "building") {
           ctx.fillStyle = "#ffe27a";
           ctx.font = "9px monospace";
           ctx.textAlign = "right";
           ctx.fillText("BEREIT", btn.x + btn.w - 4, btn.y + 12);
         }
+      }
+
+      // Queue count badge (parallel unit production).
+      const count = game.queuedCount(btn.what);
+      if (count > 1) {
+        ctx.fillStyle = "#ffe27a";
+        ctx.font = "bold 11px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText(`x${count}`, btn.x + btn.w - 4, btn.y + 13);
       }
     }
   }

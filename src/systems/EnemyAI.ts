@@ -25,8 +25,12 @@ export class EnemyAI {
 
     const fs = this.game.enemy;
 
-    // Keep the production lines busy.
-    if (!fs.unitQueue) {
+    // Keep the production lines busy — the AI exploits parallel production too:
+    // it may keep one unit queued per producing building it owns.
+    const producerCount =
+      this.game.countBuildings("enemy", "barracks") +
+      this.game.countBuildings("enemy", "war_factory");
+    if (fs.unitQueue.length < Math.max(1, producerCount)) {
       const hasFactory = this.game.hasBuilding("enemy", "war_factory");
       const hasBarracks = this.game.hasBuilding("enemy", "barracks");
       const roll = Math.random();
@@ -48,8 +52,7 @@ export class EnemyAI {
     if (
       harvesters.length === 0 &&
       this.game.hasBuilding("enemy", "war_factory") &&
-      fs.credits > 1100 &&
-      !fs.unitQueue
+      fs.credits > 1100
     ) {
       fs.queueUnit("harvester");
     }
