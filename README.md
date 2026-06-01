@@ -9,8 +9,19 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 
 ## Features
 
-- **Startmenü mit 3 Missionen** unterschiedlicher Schwierigkeit (eigene Karten
-  per Seed, mehr Gegner-Credits, aggressivere Wellen, befestigte Gegnerbasis).
+- **3 spielbare Parteien** mit komplett eigenem Roster, Tech-Tree, Farben und
+  Superwaffe:
+  - **Allianz** – ausgewogen, *Orbitallaser* (präziser Schlag)
+  - **Legion** – schwer & zäh, *Nuklearrakete* (großer Flächenschaden)
+  - **Syndikat** – schnell & High-Tech, *EMP-Sturm* (lähmt Einheiten & Gebäude)
+- **Superwaffen** mit Ladezeit: bei „BEREIT" mit Taste **T** ein Ziel anvisieren.
+  Die KI setzt ihre Superwaffe ebenfalls ein.
+- **Schwierigkeitsgrade** (Leicht/Normal/Schwer): skalieren Gegner-Wirtschaft,
+  Wellengröße/-takt und den Schaden gegen den Spieler.
+- **Prozedurale Musik** im C&C-Stil (mehrere Tracks, Web Audio, keine Dateien) –
+  ein-/ausschalten mit **N**.
+- **Startmenü** zur Auswahl von Partei, Schwierigkeit und Mission.
+- **3 Missionen** unterschiedlicher Schwierigkeit (eigene Karten per Seed).
 - **Nebel des Krieges**: unerkundetes Gebiet ist schwarz, erkundetes bleibt
   abgedunkelt sichtbar, gegnerische Einheiten erscheinen nur im aktuellen Sichtfeld.
 - **Tile-basierte Karte** (64×64) mit prozedural generiertem Terrain
@@ -73,7 +84,8 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 | Bewegen / Angreifen / Ernten | Rechtsklick (Ziel bestimmt die Aktion) |
 | Gebäude bauen | Button in der Seitenleiste klicken → erneut klicken, wenn „BEREIT“ → auf der Karte platzieren |
 | Platzierung abbrechen | `Esc` oder Rechtsklick |
-| Sound an/aus | `M` (oder Schalter im Menü) |
+| Superwaffe abfeuern | `T` (wenn „BEREIT") → Ziel anklicken |
+| Sound an/aus | `M` · Musik an/aus: `N` |
 | Debug-Overlay (Wegfindung) | `F3` oder `` ` `` – zeigt für ausgewählte Einheiten die A\*-Suche & den Pfad |
 | Zurück ins Menü | Klick auf den Sieg-/Niederlage-Bildschirm |
 

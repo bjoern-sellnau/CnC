@@ -54,6 +54,10 @@ export class Building extends Entity {
 
   /** Defensive buildings (guard towers) auto-fire at nearby enemies. */
   update(dt: number, ctx: GameContext): void {
+    if (this.stunnedFor > 0) {
+      this.stunnedFor -= dt;
+      return; // EMP-stunned turret holds fire
+    }
     const def = this.stats.defense;
     if (!def) return;
     if (this.cooldown > 0) this.cooldown -= dt;

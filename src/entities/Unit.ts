@@ -49,7 +49,7 @@ export class Unit extends Entity {
   }
 
   get isHarvester(): boolean {
-    return this.type === "harvester";
+    return UNIT_STATS[this.type].role === "harvester";
   }
 
   get isFlying(): boolean {
@@ -57,7 +57,7 @@ export class Unit extends Entity {
   }
 
   get isInfantry(): boolean {
-    return this.type === "soldier" || this.type === "rocket_soldier";
+    return UNIT_STATS[this.type].infantry === true;
   }
 
   /** Player/AI command: move to a world position. Clears combat intent. */
@@ -114,6 +114,10 @@ export class Unit extends Entity {
   }
 
   update(dt: number, ctx: GameContext): void {
+    if (this.stunnedFor > 0) {
+      this.stunnedFor -= dt;
+      return; // EMP-stunned: cannot move or fire this frame
+    }
     if (this.cooldown > 0) this.cooldown -= dt;
 
     if (this.isHarvester) {

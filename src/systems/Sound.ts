@@ -13,9 +13,13 @@ type SfxName =
   | "place"
   | "select";
 
+import { Music } from "./Music";
+
 export class Sound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private music: Music | null = null;
+  private wantMusic = false;
   enabled = true;
   private lastPlayed: Record<string, number> = {};
 
@@ -31,11 +35,41 @@ export class Sound {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.25;
     this.master.connect(this.ctx.destination);
+    this.music = new Music(this.ctx, this.ctx.destination);
+    if (this.wantMusic) this.music.start();
   }
 
   toggle(): boolean {
     this.enabled = !this.enabled;
     return this.enabled;
+  }
+
+  // ---- Music --------------------------------------------------------------
+
+  startMusic(): void {
+    this.wantMusic = true;
+    this.music?.start();
+  }
+
+  stopMusic(): void {
+    this.wantMusic = false;
+    this.music?.stop();
+  }
+
+  toggleMusic(): boolean {
+    if (!this.music) {
+      this.wantMusic = !this.wantMusic;
+      return this.wantMusic;
+    }
+    return this.music.toggle();
+  }
+
+  nextTrack(): void {
+    this.music?.nextTrack();
+  }
+
+  get musicTrackName(): string {
+    return this.music?.currentTrackName ?? "—";
   }
 
   play(name: SfxName): void {

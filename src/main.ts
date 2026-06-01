@@ -4,7 +4,6 @@ import { InputController } from "./core/Input";
 import { Renderer } from "./render/Renderer";
 import { Menu } from "./ui/Menu";
 import { sound } from "./systems/Sound";
-import type { MissionConfig } from "./core/missions";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -38,8 +37,13 @@ function resize(): void {
 window.addEventListener("resize", resize);
 resize();
 
-function startMission(mission: MissionConfig): void {
-  game = new Game(mission);
+function startMission(): void {
+  game = new Game({
+    mission: menu.mission,
+    playerArmy: menu.army,
+    enemyArmy: menu.enemyArmy,
+    difficulty: menu.difficulty,
+  });
   game.camera.setViewport(viewW, viewH);
   game.rebuildButtons();
   renderer = new Renderer(ctx, game);
@@ -49,6 +53,7 @@ function startMission(mission: MissionConfig): void {
   } else {
     input = new InputController(canvas, game);
   }
+  if (menu.musicOn) sound.startMusic();
   state = "playing";
 }
 
@@ -66,8 +71,10 @@ canvas.addEventListener("mousedown", (e) => {
     const result = menu.click(e.offsetX, e.offsetY);
     if (result === "sound") {
       menu.soundOn = sound.toggle();
-    } else if (result) {
-      startMission(result);
+    } else if (result === "music") {
+      menu.musicOn = sound.toggleMusic();
+    } else if (result === "start") {
+      startMission();
     }
   } else if (game && game.gameOver) {
     // Click on the end screen returns to the mission menu.
@@ -76,7 +83,7 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (state === "menu") menu.hover(e.offsetX, e.offsetY);
+  if (state === "menu") menu.setHover(e.offsetX, e.offsetY);
 });
 
 let last = performance.now();

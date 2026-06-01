@@ -2,6 +2,9 @@
 
 export type Faction = "player" | "enemy";
 
+/** The three playable sides, each with its own roster and tech tree. */
+export type ArmyId = "alliance" | "legion" | "syndicate";
+
 export interface Vec2 {
   x: number;
   y: number;
@@ -9,24 +12,33 @@ export interface Vec2 {
 
 export type TerrainType = "grass" | "sand" | "rock" | "water";
 
-/** A unit kind that can be produced and commanded. */
-export type UnitType =
-  | "soldier"
-  | "rocket_soldier"
+/**
+ * Functional role of a building. The engine reasons about roles (e.g. "the
+ * refinery", "the vehicle factory") so each army can use its own building ids.
+ */
+export type BuildingRole =
+  | "hq" // construction yard / base
+  | "power"
+  | "refinery"
+  | "infantry" // produces infantry
+  | "vehicle" // produces vehicles & aircraft
+  | "defense" // auto-firing turret
+  | "wall"
+  | "super"; // superweapon
+
+/** Functional role of a unit. */
+export type UnitRole =
+  | "harvester"
+  | "infantry"
+  | "anti_armor"
   | "tank"
   | "artillery"
-  | "aircraft"
-  | "harvester";
+  | "air"
+  | "special";
 
-/** A building kind that can be constructed. */
-export type BuildingType =
-  | "construction_yard"
-  | "power_plant"
-  | "refinery"
-  | "barracks"
-  | "war_factory"
-  | "guard_tower"
-  | "wall";
+/** Unit and building ids are army-specific strings (see core/factions.ts). */
+export type UnitType = string;
+export type BuildingType = string;
 
 /** Anything the build sidebar can produce. */
 export type ProducibleType = UnitType | BuildingType;

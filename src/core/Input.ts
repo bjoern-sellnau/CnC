@@ -44,8 +44,15 @@ export class InputController {
     window.addEventListener("keyup", (e) => {
       this.keys.delete(e.key.toLowerCase());
       if (!this.enabled) return;
-      if (e.key === "Escape") this.game.cancelPlacement();
+      if (e.key === "Escape") {
+        this.game.cancelPlacement();
+        this.game.superTargeting = false;
+      }
       if (e.key.toLowerCase() === "m") sound.toggle();
+      if (e.key.toLowerCase() === "n") sound.toggleMusic();
+      if (e.key.toLowerCase() === "t" && this.game.superReady.player) {
+        this.game.superTargeting = !this.game.superTargeting;
+      }
       if (e.key === "F3" || e.key === "`") this.game.toggleDebug();
     });
   }
@@ -71,6 +78,16 @@ export class InputController {
     if (this.game.placement) {
       if (e.button === 0) this.game.confirmPlacement();
       else this.game.cancelPlacement();
+      return;
+    }
+
+    // Superweapon targeting: left click fires, right click cancels.
+    if (this.game.superTargeting) {
+      if (e.button === 0) {
+        this.game.fireSuperweapon("player", this.game.camera.screenToWorld(sx, sy));
+      } else {
+        this.game.superTargeting = false;
+      }
       return;
     }
 

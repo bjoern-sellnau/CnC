@@ -15,8 +15,17 @@ import {
   TILE_SIZE,
   UNIT_STATS,
 } from "./config";
+import {
+  armyBuilding,
+  armyBuildOrder,
+  armyUnit,
+  armyUnitOrder,
+  type SuperweaponDef,
+} from "./factions";
 import type { GameContext } from "./GameContext";
 import type {
+  ArmyId,
+  BuildingRole,
   BuildingType,
   Faction,
   ProducibleType,
@@ -25,8 +34,16 @@ import type {
 } from "./types";
 import type { MissionConfig } from "./missions";
 import { MISSIONS } from "./missions";
+import { DIFFICULTIES, type DifficultyId } from "./difficulty";
 import { computeSidebarButtons, type ButtonRect } from "../ui/layout";
 import { dist } from "./util";
+
+export interface GameOptions {
+  mission?: MissionConfig;
+  playerArmy?: ArmyId;
+  enemyArmy?: ArmyId;
+  difficulty?: DifficultyId;
+}
 
 /** Top-level orchestrator. Owns all state and drives the simulation. */
 export class Game implements GameContext {
@@ -61,15 +78,52 @@ export class Game implements GameContext {
   /** Debug overlay: visualises pathfinding for selected units. */
   debug = false;
 
+  readonly playerArmy: ArmyId;
+  readonly enemyArmy: ArmyId;
+  readonly difficulty: DifficultyId;
+  /** Multiplier applied to damage dealt to the player (difficulty). */
+  private readonly enemyDamageMul: number;
+
+  /** Superweapon charge state per faction. timer < 0 means "no super built". */
+  superTimer: Record<Faction, number> = { player: -1, enemy: -1 };
+  superReady: Record<Faction, boolean> = { player: false, enemy: false };
+  /** When true the player is choosing a target for their superweapon. */
+  superTargeting = false;
+
+  /** Lightweight run stats for the debriefing screen. */
+  stats = {
+    elapsed: 0,
+    unitsBuilt: 0,
+    unitsLost: 0,
+    enemiesDestroyed: 0,
+    buildingsLost: 0,
+    creditsHarvested: 0,
+  };
+
   private readonly ai: EnemyAI;
 
-  constructor(mission: MissionConfig = MISSIONS[0]) {
+  constructor(opts: GameOptions = {}) {
+    const mission = opts.mission ?? MISSIONS[0];
     this.mission = mission;
+    this.playerArmy = opts.playerArmy ?? "alliance";
+    this.enemyArmy = opts.enemyArmy ?? (this.playerArmy === "legion" ? "syndicate" : "legion");
+    this.difficulty = opts.difficulty ?? "normal";
+    const diff = DIFFICULTIES[this.difficulty];
+    this.enemyDamageMul = diff.enemyDamageMul;
+
     this.map = new GameMap(mission.seed);
     this.player = new FactionState("player", mission.startingCredits);
-    this.enemy = new FactionState("enemy", mission.enemyCredits);
-    this.ai = new EnemyAI(this, mission.enemyWaveSize, mission.enemyWaveInterval);
+    this.enemy = new FactionState("enemy", Math.round(mission.enemyCredits * diff.enemyCreditMul));
+    this.ai = new EnemyAI(
+      this,
+      Math.max(2, mission.enemyWaveSize + diff.waveSizeDelta),
+      mission.enemyWaveInterval * diff.waveIntervalMul
+    );
     this.setupBases();
+  }
+
+  armyOf(faction: Faction): ArmyId {
+    return faction === "player" ? this.playerArmy : this.enemyArmy;
   }
 
   get ctx(): GameContext {
@@ -100,24 +154,26 @@ export class Game implements GameContext {
   }
 
   private foundBase(faction: Faction, tx: number, ty: number): void {
-    this.placeBuilding(faction, "construction_yard", tx, ty);
-    this.placeBuilding(faction, "power_plant", tx + 4, ty);
+    const army = this.armyOf(faction);
+    const b = (role: BuildingRole) => armyBuilding(army, role);
+    const u = (role: "harvester" | "infantry") => armyUnit(army, role);
+
+    this.placeBuilding(faction, b("hq"), tx, ty);
+    this.placeBuilding(faction, b("power"), tx + 4, ty);
     // Starting units.
-    const spawn = this.map.tileToWorldCenter(tx + 1, ty + 4);
-    this.spawnUnitAt(faction, "harvester", spawn);
+    this.spawnUnitAt(faction, u("harvester"), this.map.tileToWorldCenter(tx + 1, ty + 4));
     for (let i = 0; i < 2; i++) {
-      const s = this.map.tileToWorldCenter(tx + 3 + i, ty + 4);
-      this.spawnUnitAt(faction, "soldier", s);
+      this.spawnUnitAt(faction, u("infantry"), this.map.tileToWorldCenter(tx + 3 + i, ty + 4));
     }
     if (faction === "enemy") {
       // Give the AI the tech to actually fight & expand.
-      this.placeBuilding(faction, "refinery", tx - 4, ty);
-      this.placeBuilding(faction, "barracks", tx, ty + 4);
-      this.placeBuilding(faction, "war_factory", tx + 4, ty + 4);
+      this.placeBuilding(faction, b("refinery"), tx - 4, ty);
+      this.placeBuilding(faction, b("infantry"), tx, ty + 4);
+      this.placeBuilding(faction, b("vehicle"), tx + 4, ty + 4);
       if (this.mission.enemyDefences) {
-        this.placeBuilding(faction, "guard_tower", tx - 1, ty - 1);
-        this.placeBuilding(faction, "guard_tower", tx + 3, ty - 1);
-        this.placeBuilding(faction, "guard_tower", tx - 1, ty + 3);
+        this.placeBuilding(faction, b("defense"), tx - 1, ty - 1);
+        this.placeBuilding(faction, b("defense"), tx + 3, ty - 1);
+        this.placeBuilding(faction, b("defense"), tx - 1, ty + 3);
       }
     }
   }
@@ -126,6 +182,7 @@ export class Game implements GameContext {
 
   addCredits(faction: Faction, amount: number): void {
     this.factionState(faction).credits += amount;
+    if (faction === "player") this.stats.creditsHarvested += amount;
   }
 
   spawnProjectile(
@@ -163,7 +220,7 @@ export class Game implements GameContext {
     let best: Building | null = null;
     let bestD = Infinity;
     for (const b of this.buildings) {
-      if (b.dead || b.faction !== faction || b.type !== "refinery") continue;
+      if (b.dead || b.faction !== faction || b.stats.role !== "refinery") continue;
       const d = dist(pos, b.pos);
       if (d < bestD) {
         bestD = d;
@@ -183,10 +240,20 @@ export class Game implements GameContext {
     return this.buildings.some((b) => !b.dead && b.faction === faction && b.type === type);
   }
 
+  hasBuildingRole(faction: Faction, role: BuildingRole): boolean {
+    return this.buildings.some((b) => !b.dead && b.faction === faction && b.stats.role === role);
+  }
+
+  countBuildingsByRole(faction: Faction, role: BuildingRole): number {
+    let n = 0;
+    for (const b of this.buildings) if (!b.dead && b.faction === faction && b.stats.role === role) n++;
+    return n;
+  }
+
   /** A target for an attacker of `attacker` faction to head for. */
   findAttackTarget(victimFaction: Faction): Entity | null {
     const yard = this.buildings.find(
-      (b) => !b.dead && b.faction === victimFaction && b.type === "construction_yard"
+      (b) => !b.dead && b.faction === victimFaction && b.stats.role === "hq"
     );
     if (yard) return yard;
     const anyBuilding = this.buildings.find((b) => !b.dead && b.faction === victimFaction);
@@ -230,16 +297,15 @@ export class Game implements GameContext {
   pressBuildButton(btn: ButtonRect): void {
     if (this.gameOver) return;
     if (btn.category === "unit") {
-      // Require the producing building to exist.
-      const producedBy = (this.unitProducer(btn.what as UnitType));
-      if (!this.hasBuilding("player", producedBy)) return;
+      // Require the producing building (by role) to exist.
+      if (!this.hasBuildingRole("player", this.unitProducer(btn.what as UnitType))) return;
       this.player.queueUnit(btn.what as UnitType);
       return;
     }
     // Building button.
     const type = btn.what as BuildingType;
     const req = BUILDING_STATS[type].requires;
-    if (req && !this.hasBuilding("player", req)) return;
+    if (req && !this.hasBuildingRole("player", req)) return;
 
     const q = this.player.buildingQueue;
     if (q && q.what === type && q.ready) {
@@ -250,7 +316,7 @@ export class Game implements GameContext {
     }
   }
 
-  private unitProducer(type: UnitType): BuildingType {
+  private unitProducer(type: UnitType): BuildingRole {
     return UNIT_STATS[type].producedBy;
   }
 
@@ -327,7 +393,7 @@ export class Game implements GameContext {
   private produceUnit(faction: Faction, type: UnitType): void {
     const producer = this.unitProducer(type);
     const building =
-      this.buildings.find((b) => !b.dead && b.faction === faction && b.type === producer) ??
+      this.buildings.find((b) => !b.dead && b.faction === faction && b.stats.role === producer) ??
       this.buildings.find((b) => !b.dead && b.faction === faction);
     if (!building) return;
     const spawn = {
@@ -335,11 +401,12 @@ export class Game implements GameContext {
       y: building.pos.y + (building.tileH / 2 + 1) * TILE_SIZE,
     };
     const u = this.spawnUnitAt(faction, type, spawn);
-    if (type === "harvester") {
+    if (u.isHarvester) {
       u.orderHarvest(this);
     } else {
       u.orderMove(this, building.rallyPoint);
     }
+    this.stats.unitsBuilt += faction === "player" ? 1 : 0;
     if (faction === "player") sound.play("ready");
   }
 
@@ -351,18 +418,83 @@ export class Game implements GameContext {
       return;
     }
 
+    this.stats.elapsed += dt;
     this.recomputePower();
+    this.updateSuperweapons(dt);
     this.tickProduction(dt, this.player);
     this.tickProduction(dt, this.enemy);
     this.ai.update(dt);
 
     for (const u of this.units) if (!u.dead) u.update(dt, this);
-    for (const b of this.buildings) if (!b.dead && b.isDefensive) b.update(dt, this);
+    for (const b of this.buildings) {
+      if (b.dead) continue;
+      if (b.stunnedFor > 0) b.stunnedFor -= dt;
+      if (b.isDefensive) b.update(dt, this);
+    }
     this.updateEffects(dt);
 
     this.updateFog();
     this.cleanupDead();
     this.checkEndConditions();
+  }
+
+  // ---- Superweapons -------------------------------------------------------
+
+  superDef(faction: Faction): SuperweaponDef | null {
+    return BUILDING_STATS[armyBuilding(this.armyOf(faction), "super")].superweapon ?? null;
+  }
+
+  private updateSuperweapons(dt: number): void {
+    for (const faction of ["player", "enemy"] as Faction[]) {
+      const has = this.hasBuildingRole(faction, "super");
+      if (!has) {
+        this.superTimer[faction] = -1;
+        this.superReady[faction] = false;
+        continue;
+      }
+      const def = this.superDef(faction)!;
+      if (this.superTimer[faction] < 0) this.superTimer[faction] = def.chargeTime; // just built
+      if (!this.superReady[faction]) {
+        this.superTimer[faction] -= dt;
+        if (this.superTimer[faction] <= 0) {
+          this.superTimer[faction] = 0;
+          this.superReady[faction] = true;
+          if (faction === "player") sound.play("ready");
+        }
+      }
+    }
+  }
+
+  /** Fire `faction`'s superweapon at a world position (if charged). */
+  fireSuperweapon(faction: Faction, at: Vec2): boolean {
+    if (!this.superReady[faction]) return false;
+    const def = this.superDef(faction)!;
+    const victim: Faction = faction === "player" ? "enemy" : "player";
+
+    for (const e of [...this.units, ...this.buildings]) {
+      if (e.dead || e.faction !== victim) continue;
+      const d = dist(at, e.pos);
+      if (d <= def.radius + e.radius) {
+        const falloff = 1 - (d / (def.radius + e.radius)) * 0.5;
+        if (def.damage > 0) e.takeDamage(def.damage * falloff);
+        if (def.emp) e.stunnedFor = Math.max(e.stunnedFor, 6);
+      }
+    }
+    // Visuals: a cluster of explosions + particles across the blast.
+    this.spawnExplosion(at, def.radius);
+    const rings = def.emp ? 10 : 16;
+    for (let i = 0; i < rings; i++) {
+      const a = (i / rings) * Math.PI * 2;
+      const r = def.radius * (0.3 + Math.random() * 0.6);
+      this.spawnExplosion({ x: at.x + Math.cos(a) * r, y: at.y + Math.sin(a) * r }, def.emp ? 12 : 20);
+    }
+    this.emitBurst(at, 40, [def.color, "#ffffff", "#ffd24a"], 200, 1.2, def.radius * 0.4);
+    if (this.fog.isVisibleAt(at)) sound.play("boom");
+
+    this.superReady[faction] = false;
+    this.superTimer[faction] = def.chargeTime;
+    if (faction === "player") this.superTargeting = false;
+    return true;
   }
 
   /** Re-stamp player vision from all friendly units and buildings. */
@@ -391,6 +523,8 @@ export class Game implements GameContext {
 
   private applyProjectileDamage(proj: Projectile): void {
     const impact = proj.to;
+    // Difficulty: the enemy hits the player harder/softer.
+    const mul = proj.target.faction === "player" ? this.enemyDamageMul : 1;
     if (proj.splashRadius > 0) {
       // Area damage to everything sharing the target's faction nearby.
       const victimFaction = proj.target.faction;
@@ -399,13 +533,13 @@ export class Game implements GameContext {
         const d = dist(impact, e.pos);
         if (d <= proj.splashRadius + e.radius) {
           const falloff = 1 - (d / (proj.splashRadius + e.radius)) * 0.5;
-          e.takeDamage(proj.damage * falloff);
+          e.takeDamage(proj.damage * falloff * mul);
         }
       }
       this.spawnExplosion(impact, proj.splashRadius);
       this.emitHitParticles(impact, proj.target);
     } else if (!proj.target.dead) {
-      proj.target.takeDamage(proj.damage);
+      proj.target.takeDamage(proj.damage * mul);
       this.spawnExplosion(impact, proj.target.kind === "building" ? 14 : 8);
       this.emitHitParticles(proj.target.pos, proj.target);
     }
@@ -474,12 +608,6 @@ export class Game implements GameContext {
     }
   }
 
-  countBuildings(faction: Faction, type: BuildingType): number {
-    let n = 0;
-    for (const b of this.buildings) if (!b.dead && b.faction === faction && b.type === type) n++;
-    return n;
-  }
-
   private tickProduction(dt: number, fs: FactionState): void {
     const step = dt * fs.productionSpeedFactor;
     this.tickUnitProduction(step, fs);
@@ -500,21 +628,21 @@ export class Game implements GameContext {
   }
 
   /**
-   * Advance the unit queue. Items are grouped by their producer building type;
-   * each producer type can build as many units in parallel as the faction has
-   * buildings of that type. So two barracks train two soldiers at once.
+   * Advance the unit queue. Items are grouped by their producer building role;
+   * each role can build as many units in parallel as the faction has buildings
+   * of that role. So two infantry buildings train two soldiers at once.
    */
   private tickUnitProduction(step: number, fs: FactionState): void {
     if (fs.unitQueue.length === 0) return;
-    const slotsUsed = new Map<BuildingType, number>();
+    const slotsUsed = new Map<BuildingRole, number>();
     const completed: number[] = [];
 
     for (let i = 0; i < fs.unitQueue.length; i++) {
       const item = fs.unitQueue[i];
       const producer = UNIT_STATS[item.what as UnitType].producedBy;
-      const capacity = this.countBuildings(fs.faction, producer);
+      const capacity = this.countBuildingsByRole(fs.faction, producer);
       const used = slotsUsed.get(producer) ?? 0;
-      if (used >= capacity) continue; // every producer of this type is busy
+      if (used >= capacity) continue; // every producer of this role is busy
       slotsUsed.set(producer, used + 1);
       item.remaining -= step;
       if (item.remaining <= 0) completed.push(i);
@@ -531,7 +659,7 @@ export class Game implements GameContext {
 
   private autoPlaceEnemyBuilding(type: BuildingType): void {
     const base = this.buildings.find(
-      (b) => b.faction === "enemy" && b.type === "construction_yard"
+      (b) => b.faction === "enemy" && b.stats.role === "hq"
     );
     if (!base) return;
     for (let r = 2; r < 10; r++) {
@@ -554,6 +682,8 @@ export class Game implements GameContext {
       if (u.dead) {
         this.selected.delete(u);
         if (this.hoveredEntity === u) this.hoveredEntity = null;
+        if (u.faction === "player") this.stats.unitsLost++;
+        else this.stats.enemiesDestroyed++;
         // Bigger, louder blast for vehicles/aircraft than for infantry.
         const big = !u.isInfantry;
         this.spawnExplosion(u.pos, u.radius * (big ? 3 : 1.6));
@@ -567,6 +697,8 @@ export class Game implements GameContext {
       if (b.dead) {
         for (const t of b.tiles()) this.map.setOccupied(t.tx, t.ty, false);
         if (this.hoveredEntity === b) this.hoveredEntity = null;
+        if (b.faction === "player") this.stats.buildingsLost++;
+        else this.stats.enemiesDestroyed++;
         this.spawnExplosion(b.pos, b.radius);
         this.emitDeathParticles(b);
         if (this.fog.isVisibleAt(b.pos)) sound.play("boom");
@@ -596,12 +728,16 @@ export class Game implements GameContext {
     }
   }
 
-  /** Rebuild sidebar buttons for the current viewport. */
+  /** Rebuild sidebar buttons for the current viewport & player's army. */
   rebuildButtons(): void {
-    const unitOptions: ProducibleType[] = [];
-    if (this.hasBuilding("player", "barracks")) unitOptions.push("soldier", "rocket_soldier");
-    if (this.hasBuilding("player", "war_factory"))
-      unitOptions.push("tank", "artillery", "aircraft", "harvester");
-    this.buttons = computeSidebarButtons(this.camera.viewportWidth, unitOptions);
+    const army = this.playerArmy;
+    const unitOptions = armyUnitOrder(army).filter((id) =>
+      this.hasBuildingRole("player", UNIT_STATS[id].producedBy)
+    );
+    this.buttons = computeSidebarButtons(
+      this.camera.viewportWidth,
+      armyBuildOrder(army),
+      unitOptions
+    );
   }
 }

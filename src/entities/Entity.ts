@@ -10,6 +10,8 @@ export abstract class Entity {
   maxHp: number;
   radius = 8;
   dead = false;
+  /** Seconds remaining of EMP stun (cannot move, fire or produce). */
+  stunnedFor = 0;
 
   constructor(faction: Faction, pos: Vec2, hp: number) {
     this.faction = faction;

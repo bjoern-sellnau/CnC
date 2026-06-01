@@ -40,6 +40,7 @@ export class Renderer {
     this.drawFog();
     if (game.debug) this.drawDebug();
     this.drawSelectionBox();
+    if (game.superTargeting) this.drawSuperTargeting();
     this.drawHud();
     this.drawTooltip();
 
@@ -407,6 +408,31 @@ export class Renderer {
     }
   }
 
+  /** Crosshair + blast radius while aiming the player's superweapon. */
+  private drawSuperTargeting(): void {
+    const { ctx, game } = this;
+    const def = game.superDef("player");
+    if (!def) return;
+    const px = game.pointer.x;
+    const py = game.pointer.y;
+    if (px >= game.camera.viewportWidth - SIDEBAR_WIDTH) return;
+    ctx.strokeStyle = def.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, def.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(px - 14, py);
+    ctx.lineTo(px + 14, py);
+    ctx.moveTo(px, py - 14);
+    ctx.lineTo(px, py + 14);
+    ctx.stroke();
+    ctx.fillStyle = def.color;
+    ctx.font = "bold 13px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(`${def.name} — Ziel wählen (Esc bricht ab)`, px, py - def.radius - 10);
+  }
+
   private drawParticles(): void {
     const { ctx, game } = this;
     const cam = game.camera;
@@ -497,6 +523,37 @@ export class Renderer {
 
     this.drawMinimap(x0);
     this.drawBuildButtons();
+    this.drawSuperStatus(x0, h);
+  }
+
+  /** Superweapon charge / ready indicator at the bottom of the sidebar. */
+  private drawSuperStatus(x0: number, h: number): void {
+    const { ctx, game } = this;
+    if (!game.hasBuildingRole("player", "super")) return;
+    const def = game.superDef("player")!;
+    const y = h - 40;
+    ctx.fillStyle = "#12160e";
+    ctx.fillRect(x0 + 8, y, SIDEBAR_WIDTH - 16, 32);
+    const ready = game.superReady.player;
+    ctx.strokeStyle = ready ? def.color : "#3a4a2a";
+    ctx.lineWidth = ready ? 2 : 1;
+    ctx.strokeRect(x0 + 8, y, SIDEBAR_WIDTH - 16, 32);
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#d8e8c0";
+    ctx.font = "10px monospace";
+    ctx.fillText(def.name, x0 + 14, y + 13);
+    if (ready) {
+      ctx.fillStyle = def.color;
+      ctx.font = "bold 11px monospace";
+      ctx.fillText("BEREIT — Taste T", x0 + 14, y + 26);
+    } else {
+      const frac = 1 - game.superTimer.player / def.chargeTime;
+      ctx.fillStyle = "rgba(120,220,140,0.25)";
+      ctx.fillRect(x0 + 8, y, (SIDEBAR_WIDTH - 16) * Math.max(0, Math.min(1, frac)), 32);
+      ctx.fillStyle = "#9aaa88";
+      ctx.font = "10px monospace";
+      ctx.fillText(`Lädt: ${Math.ceil(game.superTimer.player)}s`, x0 + 14, y + 26);
+    }
   }
 
   private drawMinimap(x0: number): void {
