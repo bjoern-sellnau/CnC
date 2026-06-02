@@ -3,6 +3,7 @@ import { Game } from "../src/core/Game";
 import { MISSIONS } from "../src/core/missions";
 import { FOG_VISIBLE } from "../src/world/FogOfWar";
 import { ARMIES, ARMY_IDS, armyBuilding, armyUnit } from "../src/core/factions";
+import { Debriefing } from "../src/ui/Debriefing";
 
 const dt = 1 / 60;
 const checks: { name: string; ok: boolean }[] = [];
@@ -243,6 +244,40 @@ const pU = (role: Parameters<typeof armyUnit>[1]) => armyUnit("alliance", role);
   for (let i = 0; i < 60 * 120 && !game.gameOver; i++) game.update(dt);
   check("enemy AI produced units", game.units.some((u) => u.faction === "enemy"));
   check("simulation ran without crashing", true);
+}
+
+// ---------------------------------------------------------------------------
+// 11. Debriefing screen renders without errors and its button hit-tests.
+// ---------------------------------------------------------------------------
+{
+  // Minimal 2D-context stub (methods are no-ops; measureText returns a width).
+  const ctxStub: any = new Proxy(
+    {},
+    {
+      get: (_t, p) => (p === "measureText" ? () => ({ width: 60 }) : () => {}),
+      set: () => true,
+    }
+  );
+  const game = new Game();
+  game.stats.unitsBuilt = 12;
+  game.stats.enemiesDestroyed = 9;
+  game.stats.elapsed = 184;
+  let threw = false;
+  const debrief = new Debriefing();
+  for (const win of [true, false]) {
+    (game as any).gameOver = true;
+    (game as any).victory = win;
+    try {
+      debrief.render(ctxStub, 1280, 720, game);
+    } catch {
+      threw = true;
+    }
+  }
+  check("debriefing renders without throwing", !threw);
+  // Button is centred near the bottom of the panel; verify a hit there.
+  const py = (720 - 430) / 2;
+  check("debriefing continue button hit-tests", debrief.click(640, py + 430 - 60 + 22));
+  check("debriefing click misses elsewhere", !debrief.click(10, 10));
 }
 
 // ---------------------------------------------------------------------------

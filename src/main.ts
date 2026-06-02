@@ -3,6 +3,7 @@ import { Game } from "./core/Game";
 import { InputController } from "./core/Input";
 import { Renderer } from "./render/Renderer";
 import { Menu } from "./ui/Menu";
+import { Debriefing } from "./ui/Debriefing";
 import { sound } from "./systems/Sound";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
@@ -12,6 +13,8 @@ type AppState = "menu" | "playing";
 let state: AppState = "menu";
 
 const menu = new Menu();
+const debrief = new Debriefing();
+let debriefShown = false;
 let game: Game | null = null;
 let renderer: Renderer | null = null;
 let input: InputController | null = null;
@@ -54,12 +57,14 @@ function startMission(): void {
     input = new InputController(canvas, game);
   }
   if (menu.musicOn) sound.startMusic();
+  debriefShown = false;
   state = "playing";
 }
 
 function returnToMenu(): void {
   state = "menu";
   if (input) input.enabled = false;
+  sound.stopMusic();
   game = null;
   renderer = null;
 }
@@ -77,13 +82,14 @@ canvas.addEventListener("mousedown", (e) => {
       startMission();
     }
   } else if (game && game.gameOver) {
-    // Click on the end screen returns to the mission menu.
-    returnToMenu();
+    // On the debriefing screen, the button returns to the mission menu.
+    if (debrief.click(e.offsetX, e.offsetY)) returnToMenu();
   }
 });
 
 canvas.addEventListener("mousemove", (e) => {
   if (state === "menu") menu.setHover(e.offsetX, e.offsetY);
+  else if (game && game.gameOver) debrief.setHover(e.offsetX, e.offsetY);
 });
 
 let last = performance.now();
@@ -107,6 +113,15 @@ function frame(now: number): void {
     }
 
     renderer.render();
+
+    if (game.gameOver) {
+      if (!debriefShown) {
+        debriefShown = true;
+        sound.stopMusic();
+        sound.play(game.victory ? "ready" : "boom");
+      }
+      debrief.render(ctx, viewW, viewH, game);
+    }
   }
 
   requestAnimationFrame(frame);

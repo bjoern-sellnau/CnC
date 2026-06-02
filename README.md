@@ -21,6 +21,9 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 - **Prozedurale Musik** im C&C-Stil (mehrere Tracks, Web Audio, keine Dateien) –
   ein-/ausschalten mit **N**.
 - **Startmenü** zur Auswahl von Partei, Schwierigkeit und Mission.
+- **Einsatzbericht (Debriefing)** im C&C-Stil nach Sieg/Niederlage: Einsatzdauer,
+  gebaute/verlorene Einheiten, vernichtete Gegner, gesammeltes Tiberium und ein
+  Punktestand (ohne FMV).
 - **3 Missionen** unterschiedlicher Schwierigkeit (eigene Karten per Seed).
 - **Nebel des Krieges**: unerkundetes Gebiet ist schwarz, erkundetes bleibt
   abgedunkelt sichtbar, gegnerische Einheiten erscheinen nur im aktuellen Sichtfeld.

@@ -44,8 +44,7 @@ export class Renderer {
     this.drawHud();
     this.drawTooltip();
 
-    if (game.gameOver) this.drawGameOver();
-
+    // The debriefing screen (drawn by main.ts) takes over when the game ends.
     this.drawVersion();
   }
 
@@ -662,20 +661,5 @@ export class Renderer {
     ctx.fillRect(4, game.camera.viewportHeight - 18, w, 15);
     ctx.fillStyle = "rgba(154, 208, 107, 0.65)";
     ctx.fillText(VERSION_LABEL, 9, game.camera.viewportHeight - 7);
-  }
-
-  private drawGameOver(): void {
-    const { ctx, game } = this;
-    const w = game.camera.viewportWidth;
-    const h = game.camera.viewportHeight;
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = game.victory ? "#9ad06b" : "#ff6a5f";
-    ctx.font = "bold 48px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText(game.victory ? "SIEG!" : "NIEDERLAGE", w / 2, h / 2);
-    ctx.fillStyle = "#d8e8c0";
-    ctx.font = "16px monospace";
-    ctx.fillText("Klick für Hauptmenü", w / 2, h / 2 + 36);
   }
 }
