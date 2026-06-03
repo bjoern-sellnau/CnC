@@ -3,6 +3,7 @@ import { Game } from "./core/Game";
 import { InputController } from "./core/Input";
 import { Renderer } from "./render/Renderer";
 import { Menu } from "./ui/Menu";
+import { TitleMenu } from "./ui/TitleMenu";
 import { Options } from "./ui/Options";
 import { Intro } from "./ui/Intro";
 import { Debriefing } from "./ui/Debriefing";
@@ -11,11 +12,12 @@ import { sound } from "./systems/Sound";
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
-type AppState = "intro" | "menu" | "playing";
+type AppState = "intro" | "title" | "menu" | "playing";
 let state: AppState = "intro";
 let optionsOpen = false;
 
 const intro = new Intro();
+const titleMenu = new TitleMenu();
 const menu = new Menu();
 const options = new Options();
 const debrief = new Debriefing();
@@ -88,12 +90,20 @@ canvas.addEventListener("mousedown", (e) => {
     return;
   }
 
+  if (optionsOpen) {
+    if (options.click(mx, my) === "back") optionsOpen = false;
+    return;
+  }
+
+  if (state === "title") {
+    const a = titleMenu.click(mx, my);
+    if (a === "deploy") state = "menu";
+    else if (a === "options") optionsOpen = true;
+    return;
+  }
+
   if (state === "menu") {
     sound.unlock();
-    if (optionsOpen) {
-      if (options.click(mx, my) === "back") optionsOpen = false;
-      return;
-    }
     const result = menu.click(mx, my);
     if (result === "sound") menu.soundOn = sound.toggle();
     else if (result === "music") menu.musicOn = sound.toggleMusic();
@@ -110,14 +120,27 @@ canvas.addEventListener("mousedown", (e) => {
 canvas.addEventListener("mousemove", (e) => {
   const mx = e.offsetX;
   const my = e.offsetY;
-  if (state === "intro") intro.setHover(mx, my);
-  else if (state === "menu") (optionsOpen ? options : menu).setHover(mx, my);
+  if (optionsOpen) options.setHover(mx, my);
+  else if (state === "intro") intro.setHover(mx, my);
+  else if (state === "title") titleMenu.setHover(mx, my);
+  else if (state === "menu") menu.setHover(mx, my);
   else if (game && game.gameOver) debrief.setHover(mx, my);
 });
 
-window.addEventListener("keydown", () => {
-  // Any key skips the intro sequence (but not the boot button).
-  if (state === "intro" && intro.phase !== "button") intro.skip();
+window.addEventListener("keydown", (e) => {
+  if (state === "intro" && intro.phase !== "button") {
+    intro.skip();
+    return;
+  }
+  if (state === "title" && !optionsOpen) {
+    if (e.key === "ArrowDown") titleMenu.move(1);
+    else if (e.key === "ArrowUp") titleMenu.move(-1);
+    else if (e.key === "Enter") {
+      const a = titleMenu.activate();
+      if (a === "deploy") state = "menu";
+      else if (a === "options") optionsOpen = true;
+    }
+  }
 });
 
 let last = performance.now();
@@ -131,7 +154,12 @@ function frame(now: number): void {
   if (state === "intro") {
     intro.update(dt);
     intro.render(ctx, viewW, viewH);
-    if (intro.phase === "done") state = "menu";
+    if (intro.phase === "done") state = "title";
+  } else if (state === "title") {
+    titleMenu.army = menu.army;
+    titleMenu.update(dt);
+    titleMenu.render(ctx, viewW, viewH);
+    if (optionsOpen) options.render(ctx, viewW, viewH);
   } else if (state === "menu") {
     menu.render(ctx, viewW, viewH);
     if (optionsOpen) options.render(ctx, viewW, viewH);

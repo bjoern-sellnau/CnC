@@ -6,6 +6,7 @@ import { ARMIES, ARMY_IDS, armyBuilding, armyUnit } from "../src/core/factions";
 import { Debriefing } from "../src/ui/Debriefing";
 import { Menu } from "../src/ui/Menu";
 import { Intro } from "../src/ui/Intro";
+import { TitleMenu } from "../src/ui/TitleMenu";
 import { Options } from "../src/ui/Options";
 
 const dt = 1 / 60;
@@ -402,6 +403,12 @@ const pU = (role: Parameters<typeof armyUnit>[1]) => armyUnit("alliance", role);
       intro.render(c, 1280, 720);
     }
     check("intro completes to the menu", intro.phase === "done");
+
+    const title = new TitleMenu();
+    title.update(dt);
+    title.render(c, 1280, 720);
+    title.move(1);
+    check("title menu Enter activates an item", title.activate() !== undefined);
 
     const menu = new Menu();
     menu.render(c, 1280, 720);
