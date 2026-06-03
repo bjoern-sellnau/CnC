@@ -43,9 +43,29 @@ export class Renderer {
     if (game.superTargeting) this.drawSuperTargeting();
     this.drawHud();
     this.drawTooltip();
+    if (game.sellMode || game.powerMode) this.drawModeBanner();
 
     // The debriefing screen (drawn by main.ts) takes over when the game ends.
     this.drawVersion();
+  }
+
+  private drawModeBanner(): void {
+    const { ctx, game } = this;
+    const sell = game.sellMode;
+    const text = sell
+      ? "VERKAUFEN — Gebäude anklicken (Rechtsklick/Esc beendet)"
+      : "STROM — Gebäude an/aus klicken (Rechtsklick/Esc beendet)";
+    ctx.font = "bold 13px monospace";
+    const w = ctx.measureText(text).width + 24;
+    const x = (game.camera.viewportWidth - SIDEBAR_WIDTH) / 2 - w / 2;
+    ctx.fillStyle = sell ? "rgba(120,40,30,0.85)" : "rgba(40,70,110,0.85)";
+    ctx.fillRect(x, 10, w, 26);
+    ctx.strokeStyle = sell ? "#ff7a6a" : "#6aa0e0";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, 10, w, 26);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.fillText(text, x + w / 2, 28);
   }
 
   // ---- World --------------------------------------------------------------
@@ -129,6 +149,24 @@ export class Renderer {
         ctx.font = "9px monospace";
         ctx.textAlign = "center";
         ctx.fillText(b.stats.name, sx + pw / 2, sy + ph - 4);
+      }
+
+      // Primary production building marker.
+      if (game.isPrimary(b)) {
+        ctx.fillStyle = "#ffe27a";
+        ctx.font = "bold 12px monospace";
+        ctx.textAlign = "left";
+        ctx.fillText("★", sx + 4, sy + 14);
+      }
+
+      // Powered-off overlay.
+      if (b.poweredOff) {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(sx + 1, sy + 1, pw - 2, ph - 2);
+        ctx.fillStyle = "#ff7a6a";
+        ctx.font = "bold 10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("STROM AUS", sx + pw / 2, sy + ph / 2 + 3);
       }
 
       this.drawHealthBar(sx, sy - 6, pw, b.healthFraction);
@@ -562,6 +600,22 @@ export class Renderer {
     const my = 56;
     ctx.fillStyle = "#000";
     ctx.fillRect(mx, my, size, size);
+
+    // Radar goes offline on a power deficit (classic C&C low-power behaviour).
+    if (game.player.power < 0) {
+      for (let i = 0; i < 260; i++) {
+        ctx.fillStyle = `rgba(120,160,90,${Math.random() * 0.25})`;
+        ctx.fillRect(mx + Math.random() * size, my + Math.random() * size, 2, 2);
+      }
+      ctx.fillStyle = "#ff7a6a";
+      ctx.font = "bold 11px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("RADAR OFFLINE", mx + size / 2, my + size / 2 - 4);
+      ctx.fillStyle = "#c08070";
+      ctx.font = "9px monospace";
+      ctx.fillText("Strom benötigt", mx + size / 2, my + size / 2 + 10);
+      return;
+    }
 
     const sx = size / MAP_WIDTH;
     const sy = size / MAP_HEIGHT;

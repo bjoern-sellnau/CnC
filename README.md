@@ -32,6 +32,10 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 - **6 Einheitentypen mit A\*-Wegfindung**, inkl. Flug- und Artillerie-Einheiten.
   Auswahl per Klick oder Auswahlrechteck, Befehle per Rechtsklick.
 - **7 Gebäudetypen** mit Tech-Tree und Strom-Wirtschaft, inkl. Verteidigung.
+- **Basis-Management**: Sammler verteilen sich automatisch auf freie Felder und
+  lassen sich einer Raffinerie fest zuweisen; primäre Kaserne/Fahrzeughalle
+  wählbar; Gebäude verkaufen (50 % zurück) oder vom Strom nehmen; bei Strommangel
+  fällt das Radar (Minimap) aus.
 - **Ressourcen-Kreislauf**: Sammler ernten Tiberium, bringen es zur
   Raffinerie und füllen das Konto.
 - **Kampfsystem**: Reichweite, Schaden, Trefferpunkte, Geschosse, Explosionen
@@ -86,7 +90,12 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 | Mehrfachauswahl | `Shift` + Linksklick |
 | Bewegen / Angreifen / Ernten | Rechtsklick (Ziel bestimmt die Aktion) |
 | Gebäude bauen | Button in der Seitenleiste klicken → erneut klicken, wenn „BEREIT“ → auf der Karte platzieren |
+| Produktion abbrechen | Rechtsklick auf den Bau-Button (Kosten werden erstattet) |
 | Platzierung abbrechen | `Esc` oder Rechtsklick |
+| Sammler einer Raffinerie zuweisen | Sammler wählen → Rechtsklick auf eine eigene Raffinerie |
+| Primäre Kaserne/Fahrzeughalle | Eigenes Produktionsgebäude anklicken (★ markiert es) |
+| Gebäude verkaufen | `K` → Gebäude anklicken (50 % Erstattung) |
+| Gebäude an/aus (Strom) | `B` → Gebäude anklicken |
 | Superwaffe abfeuern | `T` (wenn „BEREIT") → Ziel anklicken |
 | Sound an/aus | `M` · Musik an/aus: `N` |
 | Debug-Overlay (Wegfindung) | `F3` oder `` ` `` – zeigt für ausgewählte Einheiten die A\*-Suche & den Pfad |

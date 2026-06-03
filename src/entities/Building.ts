@@ -35,6 +35,10 @@ export class Building extends Entity {
   }
 
   private cooldown = 0;
+  /** When powered off by the player: no power use/output and no function. */
+  poweredOff = false;
+  /** Set when the player sells the building (suppresses the loss stat/boom). */
+  sold = false;
 
   get kind(): "building" {
     return "building";
@@ -54,6 +58,7 @@ export class Building extends Entity {
 
   /** Defensive buildings (guard towers) auto-fire at nearby enemies. */
   update(dt: number, ctx: GameContext): void {
+    if (this.poweredOff) return;
     if (this.stunnedFor > 0) {
       this.stunnedFor -= dt;
       return; // EMP-stunned turret holds fire

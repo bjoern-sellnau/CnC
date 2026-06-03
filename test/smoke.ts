@@ -281,6 +281,98 @@ const pU = (role: Parameters<typeof armyUnit>[1]) => armyUnit("alliance", role);
 }
 
 // ---------------------------------------------------------------------------
+// 12. Base management: smarter harvesters, primary buildings, sell, power, cancel.
+// ---------------------------------------------------------------------------
+{
+  // Harvesters spread out: claiming a tile yields a different nearest tile.
+  const g = new Game();
+  const c = g.map.tileToWorldCenter(32, 32);
+  const t1 = g.map.findNearestResource(c);
+  let spread = false;
+  if (t1) {
+    const claimed = new Set([t1.ty * g.map.width + t1.tx]);
+    const t2 = g.map.findNearestResource(c, 40, claimed);
+    spread = !!t2 && (t2.tx !== t1.tx || t2.ty !== t1.ty);
+  }
+  check("harvesters pick distinct tiles when claimed", spread);
+}
+{
+  // A harvester returns to its assigned refinery, not the nearest one.
+  const g = new Game();
+  g.camera.setViewport(1280, 720);
+  g.map.clearArea(20, 20, 22, 22);
+  g.placeBuilding("player", pB("refinery"), 22, 22); // near
+  const far = g.placeBuilding("player", pB("refinery"), 36, 36);
+  const h = g.spawnUnitAt("player", pU("harvester"), g.map.tileToWorldCenter(24, 24));
+  h.cargo = 700;
+  h.assignedRefinery = far;
+  h.orderHarvest(g.ctx);
+  const d0 = Math.hypot(far.pos.x - h.pos.x, far.pos.y - h.pos.y);
+  for (let i = 0; i < 60 * 30; i++) g.update(dt);
+  check("harvester returns to assigned refinery", Math.hypot(far.pos.x - h.pos.x, far.pos.y - h.pos.y) < d0 - 60);
+}
+{
+  // Primary production building: produced units spawn there.
+  const g = new Game();
+  g.camera.setViewport(1280, 720);
+  g.map.clearArea(18, 18, 20, 20);
+  const b1 = g.placeBuilding("player", pB("infantry"), 20, 20);
+  const b2 = g.placeBuilding("player", pB("infantry"), 34, 34);
+  g.setPrimary(b2);
+  check("primary building is recorded", g.getPrimary("infantry") === b2);
+  g.player.credits = 10000;
+  const known = new Set(g.units.map((u) => u.id));
+  g.player.queueUnit(pU("infantry"));
+  for (let i = 0; i < 60 * 8; i++) g.update(dt);
+  const fresh = g.units.find((u) => u.faction === "player" && !u.isHarvester && !known.has(u.id));
+  const ok = !!fresh && Math.hypot(fresh.pos.x - b2.pos.x, fresh.pos.y - b2.pos.y) < Math.hypot(fresh.pos.x - b1.pos.x, fresh.pos.y - b1.pos.y);
+  check("units spawn at the primary building", ok);
+}
+{
+  // Powering a building off frees its consumption and halts its production.
+  const g = new Game();
+  g.update(dt);
+  const p0 = g.player.power;
+  const veh = g.placeBuilding("player", pB("vehicle"), 20, 20);
+  g.update(dt);
+  const p1 = g.player.power;
+  veh.poweredOff = true;
+  g.update(dt);
+  check("consumer reduces power", p1 < p0);
+  check("powering off restores power", g.player.power === p0);
+
+  const g2 = new Game();
+  const inf = g2.placeBuilding("player", pB("infantry"), 20, 20);
+  g2.player.credits = 10000;
+  g2.player.queueUnit(pU("infantry"));
+  inf.poweredOff = true;
+  g2.update(dt);
+  check("powered-off building does not produce", g2.player.unitQueue[0].remaining === g2.player.unitQueue[0].total);
+}
+{
+  // Selling a building refunds half its cost and is not counted as a loss.
+  const g = new Game();
+  g.update(dt);
+  const before = g.player.credits;
+  const b = g.placeBuilding("player", pB("power"), 20, 20);
+  const sold = g.sellBuilding(b);
+  g.update(dt);
+  check("selling refunds half the cost", sold && Math.abs(g.player.credits - (before + 150)) < 1);
+  check("sold building is removed", !g.buildings.includes(b));
+  check("selling is not a building loss", g.stats.buildingsLost === 0);
+}
+{
+  // Cancelling production refunds the queued item.
+  const g = new Game();
+  g.placeBuilding("player", pB("infantry"), 20, 20);
+  g.player.credits = 1000;
+  g.player.queueUnit(pU("infantry"));
+  check("queuing deducts cost", g.player.credits === 900);
+  g.cancelProduction(pU("infantry"));
+  check("cancelling refunds and clears", g.player.credits === 1000 && g.player.unitQueue.length === 0);
+}
+
+// ---------------------------------------------------------------------------
 for (const c of checks) console.log(`${c.ok ? "PASS" : "FAIL"}  ${c.name}`);
 const allOk = checks.every((c) => c.ok);
 console.log(allOk ? "\nSMOKE TEST: PASS" : "\nSMOKE TEST: FAIL");

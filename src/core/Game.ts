@@ -90,6 +90,12 @@ export class Game implements GameContext {
   /** When true the player is choosing a target for their superweapon. */
   superTargeting = false;
 
+  /** Player's chosen primary production building per role (units spawn there). */
+  readonly primary = new Map<BuildingRole, Building>();
+  /** Left-click building modes: sell for credits, or toggle power. */
+  sellMode = false;
+  powerMode = false;
+
   /** Lightweight run stats for the debriefing screen. */
   stats = {
     elapsed: 0,
@@ -135,6 +141,70 @@ export class Game implements GameContext {
     this.debug = !this.debug;
     if (this.debug) for (const u of this.selected) u.recomputePath(this);
     return this.debug;
+  }
+
+  // ---- Base management ----------------------------------------------------
+
+  /** The player's primary building for a role (alive), or null. */
+  getPrimary(role: BuildingRole): Building | null {
+    const b = this.primary.get(role);
+    return b && !b.dead ? b : null;
+  }
+
+  isPrimary(b: Building): boolean {
+    return this.primary.get(b.stats.role) === b;
+  }
+
+  /** Click on one of your production buildings to make it the primary. */
+  setPrimary(b: Building): void {
+    if (b.faction !== "player") return;
+    if (b.stats.role !== "infantry" && b.stats.role !== "vehicle") return;
+    this.primary.set(b.stats.role, b);
+    sound.play("select");
+  }
+
+  /** Sell a player building for half its cost. */
+  sellBuilding(b: Building): boolean {
+    if (b.faction !== "player" || b.dead || b.stats.role === "hq") return false;
+    this.addCreditsRaw("player", Math.round(b.stats.cost * 0.5));
+    if (this.isPrimary(b)) this.primary.delete(b.stats.role);
+    b.sold = true;
+    b.dead = true; // cleaned up (with refund credited) next frame
+    sound.play("place");
+    return true;
+  }
+
+  /** Toggle whether a player building draws power and functions. */
+  togglePower(b: Building): boolean {
+    if (b.faction !== "player" || b.dead) return false;
+    b.poweredOff = !b.poweredOff;
+    sound.play("select");
+    return true;
+  }
+
+  /** Cancel current production for `what`, refunding its cost. */
+  cancelProduction(what: ProducibleType): void {
+    const fs = this.player;
+    // Remove the most recently queued matching unit, or the building queue.
+    for (let i = fs.unitQueue.length - 1; i >= 0; i--) {
+      if (fs.unitQueue[i].what === what) {
+        fs.refund(fs.unitQueue[i]);
+        fs.unitQueue.splice(i, 1);
+        sound.play("select");
+        return;
+      }
+    }
+    if (fs.buildingQueue && fs.buildingQueue.what === what) {
+      fs.refund(fs.buildingQueue);
+      fs.buildingQueue = null;
+      if (this.placement && this.placement.type === what) this.placement = null;
+      sound.play("select");
+    }
+  }
+
+  /** Add credits without counting toward the harvested-stat. */
+  private addCreditsRaw(faction: Faction, amount: number): void {
+    this.factionState(faction).credits += amount;
   }
 
   // ---- Setup --------------------------------------------------------------
@@ -247,6 +317,15 @@ export class Game implements GameContext {
   countBuildingsByRole(faction: Faction, role: BuildingRole): number {
     let n = 0;
     for (const b of this.buildings) if (!b.dead && b.faction === faction && b.stats.role === role) n++;
+    return n;
+  }
+
+  /** Count only active (powered-on, un-stunned) buildings of a role. */
+  countActiveBuildingsByRole(faction: Faction, role: BuildingRole): number {
+    let n = 0;
+    for (const b of this.buildings) {
+      if (!b.dead && b.faction === faction && b.stats.role === role && !b.poweredOff && b.stunnedFor <= 0) n++;
+    }
     return n;
   }
 
@@ -392,8 +471,12 @@ export class Game implements GameContext {
   /** Spawn a freshly produced unit at its producer's rally point. */
   private produceUnit(faction: Faction, type: UnitType): void {
     const producer = this.unitProducer(type);
+    const primary = faction === "player" ? this.getPrimary(producer) : null;
     const building =
-      this.buildings.find((b) => !b.dead && b.faction === faction && b.stats.role === producer) ??
+      (primary && !primary.poweredOff ? primary : null) ??
+      this.buildings.find(
+        (b) => !b.dead && b.faction === faction && b.stats.role === producer && !b.poweredOff
+      ) ??
       this.buildings.find((b) => !b.dead && b.faction === faction);
     if (!building) return;
     const spawn = {
@@ -601,7 +684,7 @@ export class Game implements GameContext {
       fs.powerConsumed = 0;
     }
     for (const b of this.buildings) {
-      if (b.dead) continue;
+      if (b.dead || b.poweredOff) continue; // powered-off buildings are inert
       const fs = this.factionState(b.faction);
       if (b.power > 0) fs.powerProduced += b.power;
       else fs.powerConsumed += -b.power;
@@ -640,7 +723,7 @@ export class Game implements GameContext {
     for (let i = 0; i < fs.unitQueue.length; i++) {
       const item = fs.unitQueue[i];
       const producer = UNIT_STATS[item.what as UnitType].producedBy;
-      const capacity = this.countBuildingsByRole(fs.faction, producer);
+      const capacity = this.countActiveBuildingsByRole(fs.faction, producer);
       const used = slotsUsed.get(producer) ?? 0;
       if (used >= capacity) continue; // every producer of this role is busy
       slotsUsed.set(producer, used + 1);
@@ -697,11 +780,17 @@ export class Game implements GameContext {
       if (b.dead) {
         for (const t of b.tiles()) this.map.setOccupied(t.tx, t.ty, false);
         if (this.hoveredEntity === b) this.hoveredEntity = null;
-        if (b.faction === "player") this.stats.buildingsLost++;
-        else this.stats.enemiesDestroyed++;
-        this.spawnExplosion(b.pos, b.radius);
-        this.emitDeathParticles(b);
-        if (this.fog.isVisibleAt(b.pos)) sound.play("boom");
+        if (this.isPrimary(b)) this.primary.delete(b.stats.role);
+        if (b.sold) {
+          // Sold: a small puff, no loss stat, no big boom.
+          this.emitBurst(b.pos, 12, ["#9aaa88", "#c8d8b0", "#666"], 90, 0.5, b.radius);
+        } else {
+          if (b.faction === "player") this.stats.buildingsLost++;
+          else this.stats.enemiesDestroyed++;
+          this.spawnExplosion(b.pos, b.radius);
+          this.emitDeathParticles(b);
+          if (this.fog.isVisibleAt(b.pos)) sound.play("boom");
+        }
         this.buildings.splice(i, 1);
       }
     }

@@ -82,14 +82,25 @@ export class GameMap {
     return { tx: Math.floor(wx / TILE_SIZE), ty: Math.floor(wy / TILE_SIZE) };
   }
 
-  /** Find the nearest tile that still holds resources, within `maxTiles`. */
-  findNearestResource(from: Vec2, maxTiles = 40): { tx: number; ty: number } | null {
+  /**
+   * Find the nearest tile that still holds resources, within `maxTiles`.
+   * Tiles in `claimed` (by index) are avoided when an unclaimed tile exists,
+   * so multiple harvesters spread out instead of fighting over one tile.
+   */
+  findNearestResource(
+    from: Vec2,
+    maxTiles = 40,
+    claimed?: Set<number>
+  ): { tx: number; ty: number } | null {
     const start = this.worldToTile(from.x, from.y);
     let best: { tx: number; ty: number } | null = null;
     let bestD = Infinity;
+    let bestFree: { tx: number; ty: number } | null = null;
+    let bestFreeD = Infinity;
     for (let ty = Math.max(0, start.ty - maxTiles); ty < Math.min(this.height, start.ty + maxTiles); ty++) {
       for (let tx = Math.max(0, start.tx - maxTiles); tx < Math.min(this.width, start.tx + maxTiles); tx++) {
-        if (this.resources[this.index(tx, ty)] <= 0) continue;
+        const i = this.index(tx, ty);
+        if (this.resources[i] <= 0) continue;
         const dx = tx - start.tx;
         const dy = ty - start.ty;
         const d = dx * dx + dy * dy;
@@ -97,9 +108,13 @@ export class GameMap {
           bestD = d;
           best = { tx, ty };
         }
+        if ((!claimed || !claimed.has(i)) && d < bestFreeD) {
+          bestFreeD = d;
+          bestFree = { tx, ty };
+        }
       }
     }
-    return best;
+    return bestFree ?? best;
   }
 
   private generate(): void {

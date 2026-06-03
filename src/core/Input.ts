@@ -1,6 +1,7 @@
 import type { Game } from "./Game";
 import type { Entity } from "../entities/Entity";
 import type { Unit } from "../entities/Unit";
+import type { Building } from "../entities/Building";
 import { SIDEBAR_WIDTH } from "../ui/layout";
 import { sound } from "../systems/Sound";
 import { TILE_SIZE } from "./config";
@@ -44,14 +45,25 @@ export class InputController {
     window.addEventListener("keyup", (e) => {
       this.keys.delete(e.key.toLowerCase());
       if (!this.enabled) return;
+      const k = e.key.toLowerCase();
       if (e.key === "Escape") {
         this.game.cancelPlacement();
         this.game.superTargeting = false;
+        this.game.sellMode = false;
+        this.game.powerMode = false;
       }
-      if (e.key.toLowerCase() === "m") sound.toggle();
-      if (e.key.toLowerCase() === "n") sound.toggleMusic();
-      if (e.key.toLowerCase() === "t" && this.game.superReady.player) {
+      if (k === "m") sound.toggle();
+      if (k === "n") sound.toggleMusic();
+      if (k === "t" && this.game.superReady.player) {
         this.game.superTargeting = !this.game.superTargeting;
+      }
+      if (k === "k") {
+        this.game.sellMode = !this.game.sellMode;
+        this.game.powerMode = false;
+      }
+      if (k === "b") {
+        this.game.powerMode = !this.game.powerMode;
+        this.game.sellMode = false;
       }
       if (e.key === "F3" || e.key === "`") this.game.toggleDebug();
     });
@@ -68,9 +80,15 @@ export class InputController {
     this.mouse = { x: sx, y: sy };
     if (this.game.gameOver) return;
 
-    // Sidebar interaction.
+    // Sidebar interaction. Left = produce/place, right = cancel & refund.
     if (this.inSidebar(sx)) {
-      if (e.button === 0) this.handleSidebarClick(sx, sy);
+      const btn = this.game.buttons.find(
+        (b) => sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h
+      );
+      if (btn) {
+        if (e.button === 0) this.game.pressBuildButton(btn);
+        else if (e.button === 2) this.game.cancelProduction(btn.what);
+      }
       return;
     }
 
@@ -87,6 +105,21 @@ export class InputController {
         this.game.fireSuperweapon("player", this.game.camera.screenToWorld(sx, sy));
       } else {
         this.game.superTargeting = false;
+      }
+      return;
+    }
+
+    // Sell / power-toggle modes: left click acts on a building, right cancels.
+    if (this.game.sellMode || this.game.powerMode) {
+      if (e.button === 2) {
+        this.game.sellMode = false;
+        this.game.powerMode = false;
+        return;
+      }
+      const b = this.buildingAt(this.game.camera.screenToWorld(sx, sy));
+      if (b && b.faction === "player") {
+        if (this.game.sellMode) this.game.sellBuilding(b);
+        else this.game.togglePower(b);
       }
       return;
     }
@@ -149,7 +182,7 @@ export class InputController {
     return null;
   }
 
-  private buildingAt(world: Vec2): Entity | null {
+  private buildingAt(world: Vec2): Building | null {
     for (const b of this.game.buildings) {
       const left = b.tileX * TILE_SIZE;
       const top = b.tileY * TILE_SIZE;
@@ -186,21 +219,19 @@ export class InputController {
         }
       }
     } else {
-      // Single click selection.
+      // Single click: select a unit, or set a primary production building.
       const world = this.game.camera.screenToWorld(this.mouse.x, this.mouse.y);
       const u = this.unitAt(world);
-      if (u && u.faction === "player") this.game.selected.add(u);
+      if (u && u.faction === "player") {
+        this.game.selected.add(u);
+      } else {
+        const b = this.buildingAt(world);
+        if (b && b.faction === "player") this.game.setPrimary(b);
+      }
     }
 
     this.dragStart = null;
     this.game.selectionBox = null;
-  }
-
-  private handleSidebarClick(sx: number, sy: number): void {
-    const btn = this.game.buttons.find(
-      (b) => sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h
-    );
-    if (btn) this.game.pressBuildButton(btn);
   }
 
   private issueCommand(sx: number, sy: number): void {
@@ -210,8 +241,16 @@ export class InputController {
     const tile = this.game.map.worldToTile(world.x, world.y);
     const resourceHere = this.game.map.getResource(tile.tx, tile.ty) > 0;
 
+    // Right-clicking a friendly refinery assigns selected harvesters to it.
+    const b = this.buildingAt(world);
+    const friendlyRefinery =
+      b && b.faction === "player" && b.stats.role === "refinery" ? b : null;
+
     for (const u of this.game.selected) {
-      if (targetEntity) {
+      if (friendlyRefinery && u.isHarvester) {
+        u.assignedRefinery = friendlyRefinery;
+        u.orderHarvest(this.game.ctx);
+      } else if (targetEntity) {
         u.orderAttack(this.game.ctx, targetEntity);
       } else if (u.isHarvester && resourceHere) {
         u.orderHarvest(this.game.ctx);

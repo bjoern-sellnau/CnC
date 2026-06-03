@@ -32,6 +32,8 @@ export class Unit extends Entity {
   private harvestTile: { tx: number; ty: number } | null = null;
   private unloadTimer = 0;
   private targetRefinery: Building | null = null;
+  /** Player-assigned home refinery: used as the primary unload target. */
+  assignedRefinery: Building | null = null;
 
   constructor(faction: Faction, type: UnitType, pos: Vec2) {
     const s = UNIT_STATS[type];
@@ -185,7 +187,13 @@ export class Unit extends Entity {
           return;
         }
         if (!this.harvestTile || ctx.map.getResource(this.harvestTile.tx, this.harvestTile.ty) <= 0) {
-          this.harvestTile = ctx.map.findNearestResource(this.pos);
+          // Search near the assigned refinery (if any) so crews work their own
+          // field, and avoid tiles other harvesters have already claimed.
+          const origin =
+            this.assignedRefinery && !this.assignedRefinery.dead
+              ? this.assignedRefinery.pos
+              : this.pos;
+          this.harvestTile = ctx.map.findNearestResource(origin, 40, this.claimedTiles(ctx));
           if (this.harvestTile) {
             const c = ctx.map.tileToWorldCenter(this.harvestTile.tx, this.harvestTile.ty);
             this.setDestination(ctx, c);
@@ -223,7 +231,11 @@ export class Unit extends Entity {
       }
       case "return": {
         if (!this.targetRefinery || this.targetRefinery.dead) {
-          this.targetRefinery = ctx.findNearestRefinery(this.faction, this.pos);
+          // Prefer the player-assigned refinery; otherwise the nearest one.
+          this.targetRefinery =
+            this.assignedRefinery && !this.assignedRefinery.dead
+              ? this.assignedRefinery
+              : ctx.findNearestRefinery(this.faction, this.pos);
           if (this.targetRefinery) this.setDestination(ctx, this.targetRefinery.pos);
         }
         if (!this.targetRefinery) {
@@ -257,6 +269,16 @@ export class Unit extends Entity {
         break;
       }
     }
+  }
+
+  /** Resource tiles (by map index) other harvesters are already working. */
+  private claimedTiles(ctx: GameContext): Set<number> {
+    const claimed = new Set<number>();
+    for (const o of ctx.units) {
+      if (o === this || o.dead || !o.isHarvester) continue;
+      if (o.harvestTile) claimed.add(o.harvestTile.ty * ctx.map.width + o.harvestTile.tx);
+    }
+    return claimed;
   }
 
   // ---- Shared movement ----------------------------------------------------
