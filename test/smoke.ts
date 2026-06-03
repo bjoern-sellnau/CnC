@@ -4,10 +4,30 @@ import { MISSIONS } from "../src/core/missions";
 import { FOG_VISIBLE } from "../src/world/FogOfWar";
 import { ARMIES, ARMY_IDS, armyBuilding, armyUnit } from "../src/core/factions";
 import { Debriefing } from "../src/ui/Debriefing";
+import { Menu } from "../src/ui/Menu";
+import { Intro } from "../src/ui/Intro";
+import { Options } from "../src/ui/Options";
 
 const dt = 1 / 60;
 const checks: { name: string; ok: boolean }[] = [];
 const check = (name: string, ok: boolean) => checks.push({ name, ok });
+
+/** Minimal 2D-context stub so UI screens can be rendered headlessly. */
+function makeCtx(): any {
+  const grad = { addColorStop() {} };
+  return new Proxy(
+    {},
+    {
+      get: (_t, p) => {
+        if (p === "measureText") return () => ({ width: 60 });
+        if (p === "createLinearGradient" || p === "createRadialGradient") return () => grad;
+        if (p === "createPattern") return () => ({});
+        return () => {};
+      },
+      set: () => true,
+    }
+  );
+}
 
 // Convenience: ids for the default player army (alliance) and enemy (legion).
 const pB = (role: Parameters<typeof armyBuilding>[1]) => armyBuilding("alliance", role);
@@ -250,14 +270,7 @@ const pU = (role: Parameters<typeof armyUnit>[1]) => armyUnit("alliance", role);
 // 11. Debriefing screen renders without errors and its button hit-tests.
 // ---------------------------------------------------------------------------
 {
-  // Minimal 2D-context stub (methods are no-ops; measureText returns a width).
-  const ctxStub: any = new Proxy(
-    {},
-    {
-      get: (_t, p) => (p === "measureText" ? () => ({ width: 60 }) : () => {}),
-      set: () => true,
-    }
-  );
+  const ctxStub = makeCtx();
   const game = new Game();
   game.stats.unitsBuilt = 12;
   game.stats.enemiesDestroyed = 9;
@@ -370,6 +383,42 @@ const pU = (role: Parameters<typeof armyUnit>[1]) => armyUnit("alliance", role);
   check("queuing deducts cost", g.player.credits === 900);
   g.cancelProduction(pU("infantry"));
   check("cancelling refunds and clears", g.player.credits === 1000 && g.player.unitQueue.length === 0);
+}
+
+// ---------------------------------------------------------------------------
+// 13. Front-end screens (intro/menu/options) render headlessly & hit-test.
+// ---------------------------------------------------------------------------
+{
+  const c = makeCtx();
+  const { settings } = await import("../src/core/settings");
+  let threw = false;
+  try {
+    const intro = new Intro();
+    intro.render(c, 1280, 720); // boot-button phase
+    check("intro boot button hit-tests", intro.click(640, 720 * 0.72 + 20) === "boot");
+    intro.begin();
+    for (let i = 0; i < 60 * 5; i++) {
+      intro.update(dt);
+      intro.render(c, 1280, 720);
+    }
+    check("intro completes to the menu", intro.phase === "done");
+
+    const menu = new Menu();
+    menu.render(c, 1280, 720);
+    check("menu enemy army differs from player", menu.enemyArmy !== menu.army);
+    check("menu options button hit-tests", menu.click(1180, 33) === "options");
+
+    const opt = new Options();
+    opt.render(c, 1280, 720);
+    const crt0 = settings.crt;
+    opt.click(820, 277); // CRT toggle
+    check("options toggles the CRT setting", settings.crt !== crt0);
+    check("options back button closes", opt.click(640, (720 - 360) / 2 + 360 - 54 + 18) === "back");
+  } catch (e) {
+    threw = true;
+    console.log("render error:", (e as Error).message);
+  }
+  check("front-end screens render without throwing", !threw);
 }
 
 // ---------------------------------------------------------------------------

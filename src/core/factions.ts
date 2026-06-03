@@ -61,11 +61,28 @@ export interface BuildingStats {
   superweapon?: SuperweaponDef;
 }
 
+export type CrestKind = "hex" | "crown" | "rings";
+
+export interface FactionStats {
+  offense: number;
+  defense: number;
+  tech: number;
+  economy: number;
+  speed: number;
+}
+
 export interface ArmyDef {
   id: ArmyId;
   name: string;
   description: string;
+  /** Faction UI accent colour (drives crests, menu accents). */
   color: string;
+  /** Darker companion colour for fills. */
+  deep: string;
+  /** Short motto shown on the faction card. */
+  tag: string;
+  crest: CrestKind;
+  stats: FactionStats;
   units: UnitStats[];
   buildings: BuildingStats[];
 }
@@ -141,9 +158,14 @@ function baseBuildings(
 
 const alliance: ArmyDef = {
   id: "alliance",
-  name: "Allianz",
-  description: "Ausgewogene Streitkräfte mit präziser Orbitalwaffe. Gut für Einsteiger.",
-  color: "#5a86c8",
+  name: "Vanguard Coalition",
+  description:
+    "Ein Bund der alten Nationalstaaten, geschmiedet im ersten Kristallkrieg. Sie antworten der grünen Flut mit befestigten Linien, schwerer Panzerung und einer Abnutzung, die sie immer überdauern.",
+  color: "#46ff6a",
+  deep: "#0e3a1c",
+  tag: "Order Through Steel",
+  crest: "hex",
+  stats: { offense: 3, defense: 5, tech: 3, economy: 4, speed: 2 },
   units: [
     mkUnit("alliance", "all_harvester", "harvester", { name: "Sammler", cost: 1100, hp: 400, speed: 40, damage: 0, range: 0, sightRadius: 130, buildTime: 10, producedBy: "vehicle", color: "#8a9bb0", radius: 11 }),
     mkUnit("alliance", "all_rifle", "infantry", { name: "Schütze", cost: 100, hp: 60, speed: 55, damage: 9, range: 75, attackCooldown: 0.55, buildTime: 3, color: "#9ad06b", infantry: true }),
@@ -167,9 +189,14 @@ const alliance: ArmyDef = {
 
 const legion: ArmyDef = {
   id: "legion",
-  name: "Legion",
-  description: "Schwere, zähe Einheiten und eine verheerende Nuklearrakete. Langsam, aber durchschlagskräftig.",
-  color: "#c0603a",
+  name: "Kröwn Syndicate",
+  description:
+    "Ein Söldnerkartell, das Kristall zum Verkauf schürft, nicht zur Anbetung. Sie ertränken das Feld in billigen Schwärmen, kaufen Überläufer und verschwinden, bevor der Gegenangriff einschlägt.",
+  color: "#ff7a3a",
+  deep: "#3a1c08",
+  tag: "Profit Above All",
+  crest: "crown",
+  stats: { offense: 4, defense: 2, tech: 3, economy: 5, speed: 5 },
   units: [
     mkUnit("legion", "leg_harvester", "harvester", { name: "Erntemaschine", cost: 1100, hp: 480, speed: 36, damage: 0, range: 0, sightRadius: 130, buildTime: 10, producedBy: "vehicle", color: "#a08068", radius: 12 }),
     mkUnit("legion", "leg_conscript", "infantry", { name: "Konskript", cost: 80, hp: 75, speed: 50, damage: 8, range: 70, attackCooldown: 0.55, buildTime: 3, color: "#b0a060", infantry: true }),
@@ -193,9 +220,14 @@ const legion: ArmyDef = {
 
 const syndicate: ArmyDef = {
   id: "syndicate",
-  name: "Syndikat",
-  description: "Schnelle High-Tech-Einheiten mit Energiewaffen und einem lähmenden EMP-Sturm. Verwundbar, aber wendig.",
-  color: "#36b08a",
+  name: "Choralität",
+  description:
+    "Technokultisten, die den Kristall als einen einzigen lebenden Geist hören. Ihre Heerschar kämpft mit Lichtbogen-Energie, Tarnfeldern und von Resonanz umgeschriebenem Fleisch.",
+  color: "#a07bff",
+  deep: "#26123a",
+  tag: "Resonance Is Truth",
+  crest: "rings",
+  stats: { offense: 4, defense: 3, tech: 5, economy: 3, speed: 3 },
   units: [
     mkUnit("syndicate", "syn_harvester", "harvester", { name: "Sammeldrohne", cost: 1100, hp: 340, speed: 46, damage: 0, range: 0, sightRadius: 140, buildTime: 9, producedBy: "vehicle", color: "#6aa0a0", radius: 10 }),
     mkUnit("syndicate", "syn_merc", "infantry", { name: "Söldner", cost: 110, hp: 52, speed: 62, damage: 10, range: 85, attackCooldown: 0.5, sightRadius: 170, buildTime: 3, color: "#5ad0a0", infantry: true }),

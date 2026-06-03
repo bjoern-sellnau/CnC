@@ -6,6 +6,8 @@ import { Building } from "../entities/Building";
 import { FOG_EXPLORED, FOG_HIDDEN, FOG_VISIBLE } from "../world/FogOfWar";
 import { MINIMAP, SIDEBAR_WIDTH } from "../ui/layout";
 import { VERSION_LABEL } from "../version";
+import { drawCRT } from "../ui/theme";
+import { settings } from "../core/settings";
 
 const TERRAIN_COLORS: Record<TerrainType, string> = {
   grass: "#3b5a2a",
@@ -47,6 +49,8 @@ export class Renderer {
 
     // The debriefing screen (drawn by main.ts) takes over when the game ends.
     this.drawVersion();
+
+    if (settings.crt) drawCRT(ctx, w, h);
   }
 
   private drawModeBanner(): void {

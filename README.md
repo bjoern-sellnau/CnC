@@ -9,11 +9,15 @@ gebaut mit **Vite** – ganz ohne Spiele-Engine.
 
 ## Features
 
-- **3 spielbare Parteien** mit komplett eigenem Roster, Tech-Tree, Farben und
-  Superwaffe:
-  - **Allianz** – ausgewogen, *Orbitallaser* (präziser Schlag)
-  - **Legion** – schwer & zäh, *Nuklearrakete* (großer Flächenschaden)
-  - **Syndikat** – schnell & High-Tech, *EMP-Sturm* (lähmt Einheiten & Gebäude)
+- **EVE-Boot-Intro im CRT-Stil**: ein **[BOOT UP EVE]**-Button (aktiviert Audio),
+  dann eine Command-&-Conquer-artige Boot-Sequenz, die mit „WELCOME, COMMANDER"
+  ins Menü übergeht. Phosphor-grünes Terminal-Look mit Scanlines (in Optionen
+  abschaltbar).
+- **3 spielbare Parteien** mit eigenem Roster, Tech-Tree, Wappen und Superwaffe.
+  Auswahl über CRT-Fraktionskarten mit Doktrin und Stat-Balken:
+  - **Vanguard Coalition** (grün, Hexagon) – Festungen/Stahl, *Orbitallaser*
+  - **Kröwn Syndicate** (orange, Krone) – Schwärme/Tempo, *Nuklearrakete*
+  - **Choralität** (violett, Ringe) – Energie/Tech/Tarnung, *EMP-Sturm*
 - **Superwaffen** mit Ladezeit: bei „BEREIT" mit Taste **T** ein Ziel anvisieren.
   Die KI setzt ihre Superwaffe ebenfalls ein.
 - **Schwierigkeitsgrade** (Leicht/Normal/Schwer): skalieren Gegner-Wirtschaft,

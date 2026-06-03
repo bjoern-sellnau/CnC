@@ -3,16 +3,21 @@ import { Game } from "./core/Game";
 import { InputController } from "./core/Input";
 import { Renderer } from "./render/Renderer";
 import { Menu } from "./ui/Menu";
+import { Options } from "./ui/Options";
+import { Intro } from "./ui/Intro";
 import { Debriefing } from "./ui/Debriefing";
 import { sound } from "./systems/Sound";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
-type AppState = "menu" | "playing";
-let state: AppState = "menu";
+type AppState = "intro" | "menu" | "playing";
+let state: AppState = "intro";
+let optionsOpen = false;
 
+const intro = new Intro();
 const menu = new Menu();
+const options = new Options();
 const debrief = new Debriefing();
 let debriefShown = false;
 let game: Game | null = null;
@@ -64,32 +69,55 @@ function startMission(): void {
 function returnToMenu(): void {
   state = "menu";
   if (input) input.enabled = false;
-  sound.stopMusic();
   game = null;
   renderer = null;
 }
 
-// Menu interaction (separate from the in-game InputController).
 canvas.addEventListener("mousedown", (e) => {
-  sound.unlock();
-  if (state === "menu") {
-    const result = menu.click(e.offsetX, e.offsetY);
-    if (result === "sound") {
-      menu.soundOn = sound.toggle();
-    } else if (result === "music") {
-      menu.musicOn = sound.toggleMusic();
-    } else if (result === "start") {
-      startMission();
+  const mx = e.offsetX;
+  const my = e.offsetY;
+
+  if (state === "intro") {
+    if (intro.click(mx, my) === "boot") {
+      // The boot button is the user gesture that unlocks audio.
+      sound.unlock();
+      if (menu.musicOn) sound.startMusic();
+      sound.play("ready");
+      intro.begin();
     }
-  } else if (game && game.gameOver) {
-    // On the debriefing screen, the button returns to the mission menu.
-    if (debrief.click(e.offsetX, e.offsetY)) returnToMenu();
+    return;
+  }
+
+  if (state === "menu") {
+    sound.unlock();
+    if (optionsOpen) {
+      if (options.click(mx, my) === "back") optionsOpen = false;
+      return;
+    }
+    const result = menu.click(mx, my);
+    if (result === "sound") menu.soundOn = sound.toggle();
+    else if (result === "music") menu.musicOn = sound.toggleMusic();
+    else if (result === "options") optionsOpen = true;
+    else if (result === "start") startMission();
+    return;
+  }
+
+  if (game && game.gameOver) {
+    if (debrief.click(mx, my)) returnToMenu();
   }
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (state === "menu") menu.setHover(e.offsetX, e.offsetY);
-  else if (game && game.gameOver) debrief.setHover(e.offsetX, e.offsetY);
+  const mx = e.offsetX;
+  const my = e.offsetY;
+  if (state === "intro") intro.setHover(mx, my);
+  else if (state === "menu") (optionsOpen ? options : menu).setHover(mx, my);
+  else if (game && game.gameOver) debrief.setHover(mx, my);
+});
+
+window.addEventListener("keydown", () => {
+  // Any key skips the intro sequence (but not the boot button).
+  if (state === "intro" && intro.phase !== "button") intro.skip();
 });
 
 let last = performance.now();
@@ -100,8 +128,13 @@ function frame(now: number): void {
   last = now;
   if (dt > 0.1) dt = 0.1;
 
-  if (state === "menu") {
+  if (state === "intro") {
+    intro.update(dt);
+    intro.render(ctx, viewW, viewH);
+    if (intro.phase === "done") state = "menu";
+  } else if (state === "menu") {
     menu.render(ctx, viewW, viewH);
+    if (optionsOpen) options.render(ctx, viewW, viewH);
   } else if (game && renderer && input) {
     input.update(dt);
     game.update(dt);
